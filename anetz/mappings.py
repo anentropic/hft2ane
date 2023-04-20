@@ -92,14 +92,18 @@ def get_anetz_model_names(name: str) -> list[str]:
         >>> model.config.architectures
         ['DistilBertForSequenceClassification']
 
-    TODO: do all HF models define this attribute (correctly)?
+    TODO: do all HF models define this attribute correctly?
+    (i.e. would we ever need to allow manual override of this mapping?)
     """
     config = AutoConfig.from_pretrained(name)
-    return [
+    names = [
         model.__name__
         for model in _BASE_NAMES_TO_ANETZ_MODELS[config.model_type]
         if model.__name__ in config.architectures
     ]
+    if not names:
+        raise ModelNotFoundError(f"Could not find anetz model matching: {name}")
+    return names
 
 
 def get_anetz_model(model: Type[PreTrainedModel]) -> Type[PreTrainedModel]:

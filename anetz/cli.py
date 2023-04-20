@@ -1,7 +1,7 @@
 import argparse
 import importlib
 import os
-from typing import Iterable
+from typing import Collection
 import warnings
 
 import transformers
@@ -89,7 +89,7 @@ def load_models(
 
 
 def get_out_paths(
-    args: argparse.Namespace, model_cls_names: Iterable[str]
+    args: argparse.Namespace, model_cls_names: Collection[str]
 ) -> list[str]:
     out_paths = args.out_path
     if not out_paths:
@@ -228,14 +228,14 @@ if __name__ == "__main__":
         compute_units = get_compute_units(args)
         fail_on_sanity_check, confirm_ane = get_checks(args, compute_units)
     except (Abort, KeyboardInterrupt):
-        print("[magenta]Goodbye!")
+        print("🤗🤖 [magenta]Goodbye!")
         exit(0)
 
     for model_spec, out_path in zip(model_map.items(), out_paths):
         (model_cls_name, (base_model, anetz_model)) = model_spec
         if os.path.exists(out_path):
             print(
-                f"⚠️  Skipping '{model_name}' as {model_cls_name} as output path already "
+                f"> ⚠️  Skipping '{model_name}' as {model_cls_name} as output path already "
                 f"exists: {out_path}",
             )
             continue
@@ -252,11 +252,11 @@ if __name__ == "__main__":
             compute_units=compute_units,
         )
         spinner.stop()
-        print(f"💾 Saved converted model to: {out_path}")
+        print(f"> 💾 Saved converted model to: {out_path}")
 
         sane, results = sanity_check(base_model, converted)
         if sane:
-            print(f"✅ Sanity check passed for '{model_name}' as {model_cls_name}.")
+            print(f"> ✅ Sanity check passed for '{model_name}' as {model_cls_name}.")
         else:
             if fail_on_sanity_check:
                 raise SanityCheckError(
@@ -269,11 +269,13 @@ if __name__ == "__main__":
                     f"Results: {results}"
                 )
 
+        # TODO: this would be handy as a separate command that can be run on already
+        # converted models
         if confirm_ane:
             confirmed = confirm_neural_engine(converted, get_dummy_inputs(base_model))
             if confirmed:
                 print(
-                    f"✅ Confirmed Neural Engine execution for '{model_name}' as {model_cls_name}."
+                    f"> ✅ Confirmed Neural Engine execution for '{model_name}' as {model_cls_name}."
                 )
             else:
                 warnings.warn(
@@ -281,5 +283,6 @@ if __name__ == "__main__":
                     f"{model_cls_name}."
                 )
 
-    print("🎉 All done!")
-    print("[magenta]Goodbye!")
+    print("> 🎉 All done!")
+    print("")
+    print("🤗🤖 [magenta]Goodbye!")

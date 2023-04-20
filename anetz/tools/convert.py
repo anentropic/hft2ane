@@ -17,6 +17,13 @@ https://github.com/apple/ml-ane-transformers#tutorial-optimized-deployment-of-hu
 
 We implement a specific HuggingFace-specific workflow. If you have other needs
 you are best off using the original tutorial as a guide.
+
+TODO:
+How do we support a model like this?
+https://huggingface.co/mosaicml/mpt-1b-redpajama-200b/blob/main/mosaic_gpt.py
+...it has custom code but inherits from PreTrainedModel and can be loaded
+via AutoModelForCausalLM.from_pretrained
+...implies we should support choosing AutoModelFor* classes in the cli
 """
 
 
