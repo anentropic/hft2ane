@@ -6,3 +6,7 @@ There are two parts:
 - Tool to simplify loading pre-trained weights from HuggingFace into the appropriate re-implemented model, then exporting it to Apple's CoreML `.mlpackage` format. This can be run from Python via `coremltools` or incorporated into an XCode project for Swift, iOS etc, and CoreML will run it on the Neural Engine.
 
 It very much builds on the work in https://github.com/apple/ml-ane-transformers
+
+## Get started
+
+This should probably be installed via `pipx`.

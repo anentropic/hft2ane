@@ -25,6 +25,13 @@ def _normalise_inputs(inputs: dict[str, torch.Tensor]) -> dict[str, np.ndarray]:
     }
 
 
+def get_dummy_inputs(model: PreTrainedModel) -> dict[str, np.ndarray]:
+    """
+    Get dummy inputs for model inference checks.
+    """
+    return _normalise_inputs(model.dummy_inputs)
+
+
 def _values_agree(baseline: np.ndarray, coreml: np.ndarray) -> bool:
     """
     Check if the baseline and converted models agree on the outputs.
@@ -41,7 +48,9 @@ def _values_agree(baseline: np.ndarray, coreml: np.ndarray) -> bool:
     return bool(np.alltrue(baseline == coreml))
 
 
-def sanity_check(baseline: PreTrainedModel, converted: ct.models.MLModel) -> tuple[bool, dict]:
+def sanity_check(
+    baseline: PreTrainedModel, converted: ct.models.MLModel
+) -> tuple[bool, dict]:
     """
     Sanity check the converted CoreML model by comparing inference results.
 
@@ -54,7 +63,7 @@ def sanity_check(baseline: PreTrainedModel, converted: ct.models.MLModel) -> tup
     """
     with torch.no_grad():
         baseline_outputs = baseline(**baseline.dummy_inputs)
-    coreml_outputs = converted.predict(_normalise_inputs(baseline.dummy_inputs))
+    coreml_outputs = converted.predict(get_dummy_inputs(baseline))
 
     # `baseline_outputs`` is an OrderedDict, `coreml_output`` is a dict ...Python 3
     # dicts are ordered but I don't trust coremltools to necessarily preserve the order.
@@ -64,7 +73,10 @@ def sanity_check(baseline: PreTrainedModel, converted: ct.models.MLModel) -> tup
         (feature.name, coreml_outputs[feature.name])
         for feature in converted.output_description._fd_spec
     )
-    paired_iter = zip(baseline_outputs.items(), coreml_items_iter)
+    if baseline.config.return_dict:
+        paired_iter = zip(baseline_outputs.items(), coreml_items_iter)
+    else:
+        paired_iter = zip(enumerate(baseline_outputs), coreml_items_iter)
     disagreements = {}
     for (baseline_name, baseline_vals), (coreml_name, coreml_vals) in paired_iter:
         baseline_vals = baseline_vals.numpy()
@@ -88,12 +100,16 @@ def _asitop_collector(conn: mp.connection.Connection, interval: int) -> None:
             time.sleep(0.1)
             result = parse_powermetrics(timecode=timecode)
         metrics = result[0]
-        logger.debug(f"asitop_collector subprocess sending ANE reading: {metrics['ane_W']}")
-        conn.send(metrics['ane_W'])
+        logger.debug(
+            f"asitop_collector subprocess sending ANE reading: {metrics['ane_W']}"
+        )
+        conn.send(metrics["ane_W"])
         time.sleep(interval / 1000)
 
     powermetrics_process = run_powermetrics_process(timecode, interval=interval)
-    logger.debug(f"asitop_collector subprocess started with PID {powermetrics_process.pid}.")
+    logger.debug(
+        f"asitop_collector subprocess started with PID {powermetrics_process.pid}."
+    )
     with powermetrics_process:
         # send a baseline reading
         logger.debug("asitop_collector subprocess sending baseline reading...")
@@ -140,13 +156,15 @@ def confirm_neural_engine(
     else:
         p.terminate()
         p.join()
-        raise RuntimeError(f"asitop_collector subprocess did not respond within {timeout} seconds.")
+        raise RuntimeError(
+            f"asitop_collector subprocess did not respond within {timeout} seconds."
+        )
 
     # typically nothing is using the ANE, if it's in use we can't measure our model
     if baseline_ane != 0:
         p.terminate()
         p.join()
-        raise ValueError("ANE is already in use.")
+        raise RuntimeError("ANE is already in use.")
 
     parent_conn.send(None)
 
@@ -160,7 +178,7 @@ def confirm_neural_engine(
     p.join()
     while parent_conn.poll():
         ane_readings.append(parent_conn.recv())
-    
+
     # if we took any measurements where ANE power consumption was > 0
     # then we can say the model was using ANE
     return any(ane_readings)

@@ -6,14 +6,12 @@ from typing import Type, TypeVar
 
 from transformers.modeling_utils import PreTrainedModel
 from transformers.models.auto.configuration_auto import AutoConfig
-from transformers.models.auto import modeling_auto 
+from transformers.models.auto import modeling_auto
+
+from anetz.exceptions import ModelNotFoundError
 
 
 T = TypeVar("T", bound=Type)
-
-
-class ModelNotFoundError(Exception):
-    pass
 
 
 def _get_public_classes(module: ModuleType, base_class: Type[T]) -> list[Type[T]]:
@@ -68,6 +66,7 @@ def get_hf_concrete_models(name: str) -> list[Type[PreTrainedModel]]:
 
 def _names_to_anetz_models() -> dict[str, list[Type[PreTrainedModel]]]:
     from . import models
+
     mapping = {}
     for info in pkgutil.iter_modules(models.__path__):
         module = importlib.import_module(f"{models.__name__}.{info.name}")
@@ -82,7 +81,7 @@ def _names_to_anetz_models() -> dict[str, list[Type[PreTrainedModel]]]:
 _BASE_NAMES_TO_ANETZ_MODELS = _names_to_anetz_models()
 
 
-def get_anetz_models(name: str) -> list[Type[PreTrainedModel]]:
+def get_anetz_model_names(name: str) -> list[str]:
     """
     For most pre-trained model names on HuggingFace Hub, this function returns a
     list of the corresponding anetz model classes valid for that model type.
@@ -92,12 +91,12 @@ def get_anetz_models(name: str) -> list[Type[PreTrainedModel]]:
         >>> config = AutoConfig.from_pretrained("distilbert-base-uncased-finetuned-sst-2-english")
         >>> model.config.architectures
         ['DistilBertForSequenceClassification']
-    
+
     TODO: do all HF models define this attribute (correctly)?
     """
     config = AutoConfig.from_pretrained(name)
     return [
-        model
+        model.__name__
         for model in _BASE_NAMES_TO_ANETZ_MODELS[config.model_type]
         if model.__name__ in config.architectures
     ]

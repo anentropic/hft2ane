@@ -38,19 +38,27 @@ def _init_anetz_model(baseline_model: PreTrainedModel) -> PreTrainedModel:
     return anetz_model
 
 
+def get_models_for_conversion(
+    model_name: str, model_cls: ModelT
+) -> tuple[PreTrainedModel, PreTrainedModel]:
+    baseline_model = _get_baseline_model(model_name, model_cls)
+    anetz_model = _init_anetz_model(baseline_model)
+    return baseline_model, anetz_model
+
+
 def _pt_to_np_dtype(pt_dtype: torch.dtype) -> np.generic:
     """
     ct.TensorType.dtype expects a numpy dtype (or a CoreML MIL type).
     We exploit the fact that the torch and numpy dtypes are named the same.
-    
+
     https://github.com/apple/coremltools/issues/1498
-    it seems that coremltools does not support int64, the default int
-    type, for prediction (inference) and we have to use int32 instead.
+    it seems that coremltools does not support int64, the default int type,
+    for prediction (inference) and we have to use int32 instead.
     Only a problem if your inputs have values > 2**31. (~2B)
     """
     name = str(pt_dtype).replace("torch.", "")
-    if name == 'int64':
-        name = 'int32'
+    if name == "int64":
+        name = "int32"
         warn(f"Converting {pt_dtype} input tensor to {name} for CoreML compatibility.")
     return getattr(np, np.dtype(name).name)
 
@@ -71,8 +79,8 @@ def _get_ct_inputs(model: PreTrainedModel) -> list[ct.TensorType]:
 
 def _set_metadata(mlmodel: ct.models.MLModel, model_name: str) -> None:
     hfinfo = model_info(model_name)
-    mlmodel.license = hfinfo.cardData['license']
-    mlmodel.author = hfinfo.author or '<via Hugging Face>'
+    mlmodel.license = hfinfo.cardData["license"]
+    mlmodel.author = hfinfo.author or "<via Hugging Face>"
     mlmodel.version = hfinfo.sha
     mlmodel.short_description = (
         f"{hfinfo.modelId} re-implemented using anetz.{hfinfo.config['model_type']} "
@@ -80,9 +88,33 @@ def _set_metadata(mlmodel: ct.models.MLModel, model_name: str) -> None:
     )
 
 
+def to_coreml_internal(
+    baseline_model: PreTrainedModel,
+    anetz_model: PreTrainedModel,
+    out_path: str,
+    compute_units: ct.ComputeUnit = ct.ComputeUnit.ALL,
+) -> ct.models.MLModel:
+    traced_optimized_model = torch.jit.trace(
+        anetz_model,
+        list(baseline_model.dummy_inputs.values()),
+    )
+    # TODO: for some models we might want to be able to set the `classifier_config` here
+    # https://apple.github.io/coremltools/source/coremltools.converters.mil.input_types.html#classifierconfig
+    mlmodel = ct.convert(
+        traced_optimized_model,
+        convert_to="mlprogram",
+        inputs=_get_ct_inputs(baseline_model),
+        compute_units=compute_units,
+    )
+    _set_metadata(mlmodel, baseline_model.name_or_path)
+    mlmodel.save(out_path)
+    assert isinstance(mlmodel, ct.models.MLModel)
+    return mlmodel
+
+
 def to_coreml(
     model_name: str,
-    model_cls: PreTrainedModel,
+    model_cls: Type[PreTrainedModel],
     out_path: str,
     compute_units: ct.ComputeUnit = ct.ComputeUnit.ALL,
 ) -> ct.models.MLModel:
@@ -98,21 +130,10 @@ def to_coreml(
 
     TODO: we just use default config, might want to support customising it
     """
-    baseline_model = _get_baseline_model(model_name, model_cls)
-    anetz_model = _init_anetz_model(baseline_model)
-    traced_optimized_model = torch.jit.trace(
-        anetz_model,
-        list(baseline_model.dummy_inputs.values()),
-    )
-    # TODO: for some models we might want to be able to set the `classifier_config` here
-    # https://apple.github.io/coremltools/source/coremltools.converters.mil.input_types.html#classifierconfig 
-    mlmodel = ct.convert(
-        traced_optimized_model,
-        convert_to="mlprogram",
-        inputs=_get_ct_inputs(baseline_model),
+    baseline_model, anetz_model = get_models_for_conversion(model_name, model_cls)
+    return to_coreml_internal(
+        baseline_model=baseline_model,
+        anetz_model=anetz_model,
+        out_path=out_path,
         compute_units=compute_units,
     )
-    _set_metadata(mlmodel, model_name)
-    mlmodel.save(out_path)
-    assert isinstance(mlmodel, ct.models.MLModel)
-    return mlmodel
