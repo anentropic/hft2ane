@@ -8,7 +8,7 @@ from transformers.modeling_utils import PreTrainedModel
 from transformers.models.auto.configuration_auto import AutoConfig
 from transformers.models.auto import modeling_auto
 
-from anetz.exceptions import ModelNotFoundError
+from hft2ane.exceptions import ModelNotFoundError
 
 
 T = TypeVar("T", bound=Type)
@@ -64,7 +64,7 @@ def get_hf_concrete_models(name: str) -> list[Type[PreTrainedModel]]:
     ]
 
 
-def _names_to_anetz_models() -> dict[str, list[Type[PreTrainedModel]]]:
+def _names_to_hft2ane_models() -> dict[str, list[Type[PreTrainedModel]]]:
     from . import models
 
     mapping = {}
@@ -78,13 +78,13 @@ def _names_to_anetz_models() -> dict[str, list[Type[PreTrainedModel]]]:
     return mapping
 
 
-_BASE_NAMES_TO_ANETZ_MODELS = _names_to_anetz_models()
+_BASE_NAMES_TO_ANETZ_MODELS = _names_to_hft2ane_models()
 
 
-def get_anetz_model_names(name: str) -> list[str]:
+def get_hft2ane_model_names(name: str) -> list[str]:
     """
     For most pre-trained model names on HuggingFace Hub, this function returns a
-    list of the corresponding anetz model classes valid for that model type.
+    list of the corresponding hft2ane model classes valid for that model type.
 
     pre-trained models define specific model class/es to use, e.g.:
 
@@ -102,16 +102,16 @@ def get_anetz_model_names(name: str) -> list[str]:
         if model.__name__ in config.architectures
     ]
     if not names:
-        raise ModelNotFoundError(f"Could not find anetz model matching: {name}")
+        raise ModelNotFoundError(f"Could not find hft2ane model matching: {name}")
     return names
 
 
-def get_anetz_model(model: Type[PreTrainedModel]) -> Type[PreTrainedModel]:
+def get_hft2ane_model(model: Type[PreTrainedModel]) -> Type[PreTrainedModel]:
     """
     For a given HuggingFace model class, this function returns the corresponding
-    anetz model class, if there is one.
+    hft2ane model class, if there is one.
     """
     for cls in _BASE_NAMES_TO_ANETZ_MODELS[model.config_class.model_type]:
         if cls.__name__ == model.__name__:
             return cls
-    raise ModelNotFoundError(f"Could not find anetz model matching: {model.__name__}")
+    raise ModelNotFoundError(f"Could not find hft2ane model matching: {model.__name__}")

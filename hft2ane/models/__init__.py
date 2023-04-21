@@ -1,5 +1,5 @@
 """
-Modules for the models of the anetz package.
+Modules for the models of the hft2ane package.
 
 Modules should define model classes that inherit from PreTrainedModel
 (from huggingface transformers) and have identical names to the corresponding

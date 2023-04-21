@@ -8,7 +8,7 @@ from huggingface_hub import model_info
 from transformers.modeling_utils import PreTrainedModel
 from transformers.models.auto.modeling_auto import _BaseAutoModelClass
 
-from anetz.mappings import get_anetz_model
+from hft2ane.mappings import get_hft2ane_model
 
 
 """
@@ -40,19 +40,19 @@ def _get_baseline_model(model_name: str, model_cls: ModelT) -> PreTrainedModel:
     ).eval()
 
 
-def _init_anetz_model(baseline_model: PreTrainedModel) -> PreTrainedModel:
-    anetz_model_cls = get_anetz_model(baseline_model.__class__)
-    anetz_model = anetz_model_cls(baseline_model.config).eval()
-    anetz_model.load_state_dict(baseline_model.state_dict())
-    return anetz_model
+def _init_hft2ane_model(baseline_model: PreTrainedModel) -> PreTrainedModel:
+    hft2ane_model_cls = get_hft2ane_model(baseline_model.__class__)
+    hft2ane_model = hft2ane_model_cls(baseline_model.config).eval()
+    hft2ane_model.load_state_dict(baseline_model.state_dict())
+    return hft2ane_model
 
 
 def get_models_for_conversion(
     model_name: str, model_cls: ModelT
 ) -> tuple[PreTrainedModel, PreTrainedModel]:
     baseline_model = _get_baseline_model(model_name, model_cls)
-    anetz_model = _init_anetz_model(baseline_model)
-    return baseline_model, anetz_model
+    hft2ane_model = _init_hft2ane_model(baseline_model)
+    return baseline_model, hft2ane_model
 
 
 def _pt_to_np_dtype(pt_dtype: torch.dtype) -> np.generic:
@@ -92,19 +92,19 @@ def _set_metadata(mlmodel: ct.models.MLModel, model_name: str) -> None:
     mlmodel.author = hfinfo.author or "<via Hugging Face>"
     mlmodel.version = hfinfo.sha
     mlmodel.short_description = (
-        f"{hfinfo.modelId} re-implemented using anetz.{hfinfo.config['model_type']} "
+        f"{hfinfo.modelId} re-implemented using hft2ane.{hfinfo.config['model_type']} "
         "for compatibility with execution on Neural Engine."
     )
 
 
 def to_coreml_internal(
     baseline_model: PreTrainedModel,
-    anetz_model: PreTrainedModel,
+    hft2ane_model: PreTrainedModel,
     out_path: str,
     compute_units: ct.ComputeUnit = ct.ComputeUnit.ALL,
 ) -> ct.models.MLModel:
     traced_optimized_model = torch.jit.trace(
-        anetz_model,
+        hft2ane_model,
         list(baseline_model.dummy_inputs.values()),
     )
     # TODO: for some models we might want to be able to set the `classifier_config` here
@@ -139,10 +139,10 @@ def to_coreml(
 
     TODO: we just use default config, might want to support customising it
     """
-    baseline_model, anetz_model = get_models_for_conversion(model_name, model_cls)
+    baseline_model, hft2ane_model = get_models_for_conversion(model_name, model_cls)
     return to_coreml_internal(
         baseline_model=baseline_model,
-        anetz_model=anetz_model,
+        hft2ane_model=hft2ane_model,
         out_path=out_path,
         compute_units=compute_units,
     )

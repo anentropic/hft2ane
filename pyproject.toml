@@ -1,11 +1,11 @@
 [tool.poetry]
-name = "anetz"
+name = "hft2ane"
 version = "0.1.0"
-description = "Apple Neural Engine-accelerated versions of any BERT-derived model on HuggingFace"
+description = "Tool for exporting Apple Neural Engine-accelerated versions of transformers models on HuggingFace Hub."
 authors = ["Anentropic <ego@anentropic.com>"]
 readme = "README.md"
 license = "Apache 2.0"
-packages = [{include = "anetz"}]
+packages = [{include = "hft2ane"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"

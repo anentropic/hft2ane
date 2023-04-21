@@ -14,13 +14,15 @@ from huggingface_hub.utils import RepositoryNotFoundError
 from rich import print
 from transformers.modeling_utils import PreTrainedModel
 
-from anetz.exceptions import ModelNotFoundError
-from anetz.mappings import get_anetz_model_names
-from anetz.tools.convert import get_models_for_conversion, to_coreml_internal
-from anetz.tools.evaluate import sanity_check, confirm_neural_engine, get_dummy_inputs
+from hft2ane.exceptions import ModelNotFoundError
+from hft2ane.mappings import get_hft2ane_model_names
+from hft2ane.tools.convert import get_models_for_conversion, to_coreml_internal
+from hft2ane.tools.evaluate import sanity_check, confirm_neural_engine, get_dummy_inputs
 
 
 COMPUTE_UNIT_CHOICES = tuple(cu.name for cu in ComputeUnit)
+
+BYLINE = "🤗🤖->🍏🧠"
 
 
 class SanityCheckError(Exception):
@@ -57,7 +59,7 @@ def load_models(
     if not model_cls_names:
         print("Select the model classes to use as a base for conversion:")
         model_cls_names = select_multiple(
-            options=get_anetz_model_names(model_name),
+            options=get_hft2ane_model_names(model_name),
             minimal_count=1,
         )
         # TODO: add 'other' option to allow enter a custom import path
@@ -82,8 +84,8 @@ def load_models(
                 f"'transformers.modeling_utils.PreTrainedModel', conversion is likely to fail."
             )
 
-        base_model, anetz_model = get_models_for_conversion(model_name, model_cls)
-        model_map[model_cls_name] = (base_model, anetz_model)
+        base_model, hft2ane_model = get_models_for_conversion(model_name, model_cls)
+        model_map[model_cls_name] = (base_model, hft2ane_model)
 
     return model_name, model_map
 
@@ -125,6 +127,13 @@ def get_compute_units(args: argparse.Namespace) -> ComputeUnit:
         compute_units = select(
             options=COMPUTE_UNIT_CHOICES,
             cursor_index=0,  # ALL
+        )
+    if compute_units not in (ComputeUnit.ALL, ComputeUnit.CPU_AND_NE):
+        print(
+            f"⚠️  {compute_units.name} does not include the Neural Engine "
+            "so the model changes applied by hft2ane are not helpful. "
+            "If you just want to convert the model to Core ML format, use "
+            "the coremltools library's convert method directly instead."
         )
     return ComputeUnit[compute_units]
 
@@ -219,8 +228,9 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    logo = text2art("ANETZ", font="small")
+    logo = text2art("HFT2ANE", font="standard")
     print(f"[magenta]{logo}")
+    print(BYLINE + "\n")
 
     try:
         model_name, model_map = load_models(args)
@@ -228,11 +238,12 @@ if __name__ == "__main__":
         compute_units = get_compute_units(args)
         fail_on_sanity_check, confirm_ane = get_checks(args, compute_units)
     except (Abort, KeyboardInterrupt):
-        print("🤗🤖 [magenta]Goodbye!")
+        print("[magenta]Goodbye!")
+        print("\n" + BYLINE)
         exit(0)
 
     for model_spec, out_path in zip(model_map.items(), out_paths):
-        (model_cls_name, (base_model, anetz_model)) = model_spec
+        (model_cls_name, (base_model, hft2ane_model)) = model_spec
         if os.path.exists(out_path):
             print(
                 f"> ⚠️  Skipping '{model_name}' as {model_cls_name} as output path already "
@@ -247,7 +258,7 @@ if __name__ == "__main__":
         spinner.start()
         converted = to_coreml_internal(
             base_model,
-            anetz_model,
+            hft2ane_model,
             out_path,
             compute_units=compute_units,
         )
@@ -264,9 +275,9 @@ if __name__ == "__main__":
                     f"Results: {results}"
                 )
             else:
-                warnings.warn(
-                    f"Sanity check failed for '{model_name}' as {model_cls_name}.\n"
-                    f"Results: {results}"
+                print(
+                    f"> 🛑 Sanity check failed for '{model_name}' as {model_cls_name}.\n"
+                    f"> 📊 Results: {results}"
                 )
 
         # TODO: this would be handy as a separate command that can be run on already
@@ -278,11 +289,12 @@ if __name__ == "__main__":
                     f"> ✅ Confirmed Neural Engine execution for '{model_name}' as {model_cls_name}."
                 )
             else:
-                warnings.warn(
-                    f"Failed to confirm Neural Engine execution for '{model_name}' as "
+                print(
+                    f"> 🛑 Failed to confirm Neural Engine execution for '{model_name}' as "
                     f"{model_cls_name}."
                 )
 
     print("> 🎉 All done!")
     print("")
-    print("🤗🤖 [magenta]Goodbye!")
+    print("[magenta]Goodbye!")
+    print("\n" + BYLINE)
