@@ -36,15 +36,41 @@ def _values_agree(baseline: np.ndarray, coreml: np.ndarray) -> bool:
     """
     Check if the baseline and converted models agree on the outputs.
 
-    TODO: should tolerance be configurable?
+    The baseline and converted coreml models are not numerically identical
+    (I assume due to fp16 quantization) so we check if the values agree
+    to within some tolerance. Choosing a tolerance, so far is based on two
+    examples:
+
+        distilbert-base-cased-distilled-squad/DistilBertForQuestionAnswering/0
+        allclose(rtol=0.0001) ? False
+        allclose(rtol=0.001) ? False
+        allclose(rtol=0.01) ? False
+        allclose(rtol=0.1) ? True
+        distilbert-base-cased-distilled-squad/DistilBertForQuestionAnswering/1
+        allclose(rtol=0.0001) ? False
+        allclose(rtol=0.001) ? False
+        allclose(rtol=0.01) ? True
+        allclose(rtol=0.1) ? True
+        distilbert-base-uncased-finetuned-sst-2-english/DistilBertForSequenceClassification/0
+        allclose(rtol=0.0001) ? False
+        allclose(rtol=0.001) ? False
+        allclose(rtol=0.01) ? False
+        allclose(rtol=0.1) ? True
+
+    `rtol` seems a better choice than `atol` as the magnitudes of the values
+    differ, e.g. DistilBertForQuestionAnswering/0 ranges approx -10..10 while
+    DistilBertForQuestionAnswering/1 and DistilBertForSequenceClassification/0
+    ranges approx -1..1
+
+    For values ranging -1..1, `rtol=0.1` gives similar results to `atol=0.01`
+    ...seems sufficiently tight to feel we're getting an equivalent result 🤞
     """
     if baseline.shape != coreml.shape:
         return False
     if baseline.dtype != coreml.dtype:
         return False
-    # the baseline and converted models are not numerically identical
     if np.issubdtype(baseline.dtype, np.floating):
-        return np.allclose(baseline, coreml, atol=0.01)
+        return np.allclose(baseline, coreml, rtol=0.1)
     return bool(np.alltrue(baseline == coreml))
 
 

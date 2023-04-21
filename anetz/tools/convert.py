@@ -24,6 +24,8 @@ https://huggingface.co/mosaicml/mpt-1b-redpajama-200b/blob/main/mosaic_gpt.py
 ...it has custom code but inherits from PreTrainedModel and can be loaded
 via AutoModelForCausalLM.from_pretrained
 ...implies we should support choosing AutoModelFor* classes in the cli
+from_pretrained(trust_remote_code=True) allows the AutoModel to use custom code
+from the model's HF repo (as opposed to only the `transformers` package)
 """
 
 

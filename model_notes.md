@@ -20,10 +20,12 @@ Ones that look interesting to me...
 
 ### Not BERTs
 
-See also: https://github.com/anentropic/experiments-coreml-gpt2#update
 
-- **T5** and derivatives
+- **(Flan-)T5** and derivatives
   - https://github.com/bigscience-workshop/t-zero a T5 family trained for zero-shot tasks, outperforming GPT3-175B on many. Comes in 3B and 11B variants (both too big for ANE). The 3B variant is "Same as T0 but starting from a T5-LM XL (3B parameters) pre-trained model". Training dataset is open https://huggingface.co/datasets/bigscience/P3
+  - https://ai.googleblog.com/2023/02/the-flan-collection-advancing-open.html Flan-T5-XL (3B) trained on latest dataset beats instruction-tuned OPT-175B. Flan-T5-large does pretty well for some prompts I tried.
+- **GPT** of course
+  - see https://github.com/anentropic/experiments-coreml-gpt2#update for notes and related models
 - **BART** is to BERT as T5 is to GPT (i.e. encoder-decoder vs encoder-only)
   - https://huggingface.co/Babelscape/rebel-large a BART that extracts knowledge-graph triples
 - **SAM (Segment Anything)**
