@@ -1,4 +1,4 @@
-# 🤗🤖➡🍏🧠
+# 🤗🤖➔🍏🧠
 ## `hft2ane`: HuggingFace Transformers to Apple Neural Engine
 
 This tool allows you to convert pre-trained models (having Transformer achitecture) from Hugging Face Hub into a form that will run on the Neural Engine of Apple Silicon Macs (and iPhone too, but have not tested).
