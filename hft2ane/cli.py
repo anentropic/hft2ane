@@ -84,7 +84,10 @@ def load_models(
                 f"'transformers.modeling_utils.PreTrainedModel', conversion is likely to fail."
             )
 
+        spinner = Spinner(DOTS, f"Loading '{model_name}' as {model_cls_name}...")
+        spinner.start()
         base_model, hft2ane_model = get_models_for_conversion(model_name, model_cls)
+        spinner.stop()
         model_map[model_cls_name] = (base_model, hft2ane_model)
 
     return model_name, model_map
@@ -128,6 +131,7 @@ def get_compute_units(args: argparse.Namespace) -> ComputeUnit:
             options=COMPUTE_UNIT_CHOICES,
             cursor_index=0,  # ALL
         )
+    compute_units = ComputeUnit[compute_units]
     if compute_units not in (ComputeUnit.ALL, ComputeUnit.CPU_AND_NE):
         print(
             f"⚠️  {compute_units.name} does not include the Neural Engine "
@@ -135,7 +139,7 @@ def get_compute_units(args: argparse.Namespace) -> ComputeUnit:
             "If you just want to convert the model to Core ML format, use "
             "the coremltools library's convert method directly instead."
         )
-    return ComputeUnit[compute_units]
+    return compute_units
 
 
 def get_checks(
