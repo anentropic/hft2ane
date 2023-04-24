@@ -1,5 +1,9 @@
 import difflib
 
+"""
+I naively thought these might help with translating model types to ANE
+"""
+
 
 def diff(a, b):
     """

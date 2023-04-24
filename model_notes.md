@@ -32,6 +32,7 @@ Ones that look interesting to me...
   - "The image encoder has 632M parameters. The prompt encoder and mask decoder have 4M parameters."
   - model is Apache 2.0 license 🎉
   - https://github.com/facebookresearch/segment-anything#model-checkpoints free download
+  - https://huggingface.co/docs/transformers/main/en/model_doc/sam
 - **Perceiver** https://huggingface.co/docs/transformers/model_doc/perceiver
 - **BLIP-2** https://huggingface.co/docs/transformers/main/model_doc/blip-2 (and BLIP) for image+text tasks
 - **REALM/RAG/RETRO** retrieval-enhanced transformers... REALM and RETRO from Google (using BERT-derived retriever), RAG from Meta (using BART)

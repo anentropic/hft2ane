@@ -86,6 +86,10 @@ def sanity_check(
             dict: Outputs where the baseline and converted models disagree
                   (by more than ∓0.01)
 
+    TODO:
+    ane_transformers.testing_utils.compute_psnr is how Apple were evaluating
+    their conversion (and for classification task, does argmax point to same
+    input id?)
     """
     with torch.no_grad():
         baseline_outputs = baseline(**baseline.dummy_inputs)

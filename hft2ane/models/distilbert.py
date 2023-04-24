@@ -17,9 +17,22 @@ from transformers.models.distilbert.modeling_distilbert import (
 MODEL_TYPE = "distilbert"
 
 
-_INTERNAL_PROJ_RE = re.compile(r".*lin.*\.weight")
+_INTERNAL_PROJ_RE = re.compile(
+    r".*({})\.weight".format(
+        "|".join(
+            [
+                "q_lin",
+                "k_lin",
+                "v_lin",
+                "out_lin",
+                "lin1",
+                "lin2",
+            ]
+        )
+    )
+)
 _OUTPUT_PROJ_RE = re.compile(
-    r".*({}).*\.weight".format(
+    r".*({})\.weight".format(
         "|".join(
             [
                 "classifier",
