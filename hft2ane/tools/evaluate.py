@@ -64,6 +64,11 @@ def _values_agree(baseline: np.ndarray, coreml: np.ndarray) -> bool:
 
     For values ranging -1..1, `rtol=0.1` gives similar results to `atol=0.01`
     ...seems sufficiently tight to feel we're getting an equivalent result 🤞
+
+    OTOH:
+    https://github.com/huggingface/exporters#configuring-the-export-options
+    uses atol 1e-4 by default 🤷‍♂️ (I think that is too tight for us given the
+    changes we make to underlying model)
     """
     if baseline.shape != coreml.shape:
         return False

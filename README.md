@@ -35,3 +35,4 @@ Currently `hft2ane` supports:
 
 - `ane_transformers` is currently pinned to PyTorch `<=1.11.0`. This means we can't load and convert any models which use PyTorch 2+ features. See https://github.com/apple/ml-ane-transformers/pull/3
   - it also has another bug we already monkey-patched around, the future might be to vendor a forked version into the project
+- Can we make use of this https://github.com/huggingface/exporters

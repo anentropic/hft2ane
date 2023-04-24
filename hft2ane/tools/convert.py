@@ -9,6 +9,7 @@ from transformers.modeling_utils import PreTrainedModel
 from transformers.models.auto.modeling_auto import _BaseAutoModelClass
 
 from hft2ane.mappings import get_hft2ane_model
+from hft2ane.utils.introspection import model_config
 
 
 """
@@ -73,9 +74,6 @@ def _pt_to_np_dtype(pt_dtype: torch.dtype) -> np.generic:
 
 
 def _get_ct_inputs(model: PreTrainedModel) -> list[ct.TensorType]:
-    """
-    TODO: do all HuggingFace models reliably define `dummy_inputs`?
-    """
     return [
         ct.TensorType(
             name,
@@ -84,6 +82,32 @@ def _get_ct_inputs(model: PreTrainedModel) -> list[ct.TensorType]:
         )
         for name, tensor in model.dummy_inputs.items()
     ]
+
+
+def _get_ct_outputs(model: PreTrainedModel) -> list[ct.TensorType]:
+    with model_config(model, return_dict=True, torchscript=False):
+        dummy_outputs = model(**model.dummy_inputs)
+    return [
+        ct.TensorType(
+            name,
+            dtype=_pt_to_np_dtype(tensor.dtype),
+        )
+        for name, tensor in dummy_outputs.items()
+    ]
+
+
+def _get_classifier_config(id2label: dict[str, int | str]) -> ct.ClassifierConfig:
+    # we could probably just assume id2label keys are contiguous and start at 0
+    # but the data structure does not guarantee this, so play it safe
+    label_type = type(next(id2label.values().__iter__()))
+    default = "" if label_type is str else 0
+    labels = [default] * (max(id2label.keys()) + 1)
+    for i, label in id2label.items():
+        labels[i] = label
+    return ct.ClassifierConfig(
+        class_labels=labels,
+        predicted_probabilities_output="logits",  # TODO
+    )
 
 
 def _set_metadata(mlmodel: ct.models.MLModel, model_name: str) -> None:
@@ -103,17 +127,26 @@ def to_coreml_internal(
     out_path: str,
     compute_units: ct.ComputeUnit = ct.ComputeUnit.ALL,
 ) -> ct.models.MLModel:
+    if baseline_model.num_parameters() > 1e9:
+        warn(
+            "Model has > 1B parameters. This is unlikely to fit within the "
+            "Neural Engine's ~3GB memory constraints and will execute on CPU. "
+            "Run the --confirm-neural-engine evaluation to confirm."
+        )
     traced_optimized_model = torch.jit.trace(
         hft2ane_model,
         list(baseline_model.dummy_inputs.values()),
     )
-    # TODO: for some models we might want to be able to set the `classifier_config` here
-    # https://apple.github.io/coremltools/source/coremltools.converters.mil.input_types.html#classifierconfig
+    kwargs = {}
+    # if class_labels := getattr(baseline_model.config, "id2label", None):
+    #     kwargs["classifier_config"] = _get_classifier_config(class_labels)
     mlmodel = ct.convert(
         traced_optimized_model,
         convert_to="mlprogram",
         inputs=_get_ct_inputs(baseline_model),
+        outputs=_get_ct_outputs(baseline_model),
         compute_units=compute_units,
+        **kwargs,
     )
     _set_metadata(mlmodel, baseline_model.name_or_path)
     mlmodel.save(out_path)

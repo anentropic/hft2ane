@@ -2,7 +2,7 @@ import importlib
 import warnings
 from contextlib import contextmanager
 from types import NoneType
-from typing import get_type_hints, get_args, Type
+from typing import Any, get_type_hints, get_args, Type
 
 import torch.nn
 from transformers.utils.fx import symbolic_trace
@@ -87,6 +87,13 @@ def _fields_from_model_output(
     return required_fields, optional_fields
 
 
+def _is_model_output(t: Any) -> bool:
+    try:
+        return issubclass(t, ModelOutput)
+    except TypeError:
+        return False
+
+
 def _get_by_model_outputs(model: torch.nn.Module) -> tuple[list[str], list[str]]:
     """
     Get the output of a model by inspecting the annotations of the forward method.
@@ -102,7 +109,7 @@ def _get_by_model_outputs(model: torch.nn.Module) -> tuple[list[str], list[str]]
         pass
     else:
         type_args = _flatten_type_args(get_args(RetT))
-        model_outputs = list(filter(lambda t: issubclass(t, ModelOutput), type_args))
+        model_outputs = list(filter(_is_model_output, type_args))
         if not model_outputs:
             warnings.warn(
                 "No ModelOutput found in model.forward return type annotations. "
@@ -139,9 +146,14 @@ def get_input_and_output_key_names(
     it seems that we can pass a list of strings to `outputs` to specify the output names
     (or else a list of coremltools.converters.mil.input_types.TensorType(name=name))
 
+    NOTE:
+    All the ane_transformer models override the HF base model output to NOT return a
+    dict (or even able to). Presumably returning a dict is not useful for ct.convert.
+    So the `model` passed here should be the original HF model, not the ane_transformer.
+
     TODO:
-    Note that all the ane_transformer models override the HF base model output to NOT
-    return a dict. Presumably returning a dict is not useful for ct.convert
+    Can we make use of this https://github.com/huggingface/exporters ?
+    It does some nice things e.g. already applied Softmax to the classifier outputs.
     """
     with model_config(model, return_dict=True):
         try:
