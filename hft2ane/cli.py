@@ -37,11 +37,16 @@ Config.raise_on_escape = True
 def _validate_model_name(model_name: str) -> bool:
     if not model_name:
         return False
+    spinner = Spinner(DOTS, f"Checking '{model_name}' in HuggingFace Hub...")
+    spinner.start()
     try:
         ModelCard.load(model_name)
     except RepositoryNotFoundError:
         return False
-    return True
+    else:
+        return True
+    finally:
+        spinner.stop()
 
 
 def load_models(
@@ -57,9 +62,13 @@ def load_models(
 
     model_cls_names = args.model_cls
     if not model_cls_names:
+        spinner = Spinner(DOTS, f"Looking up model classes for '{model_name}'...")
+        spinner.start()
+        options = get_hft2ane_model_names(model_name)
+        spinner.stop()
         print("Select the model classes to use as a base for conversion:")
         model_cls_names = select_multiple(
-            options=get_hft2ane_model_names(model_name),
+            options=options,
             minimal_count=1,
         )
         # TODO: add 'other' option to allow enter a custom import path
