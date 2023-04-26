@@ -5,6 +5,7 @@ Ones that look interesting to me...
 ## BERTs
 
 - **BERT:** the OG
+  - https://huggingface.co/mosaicml/mosaic-bert-base an improved BERT: "MosaicBERT trains faster and achieves higher pretraining and finetuning accuracy when benchmarked against [HF bert-base]
 - **DistilBERT:** reduced params by training under the guidance of a BERT tutor
 - **RoBERTa:** minor tweaks and an improved training regime, fine-tuned large RoBERTas are SOTA on many benchmarks.
 - **ALBERT:** reduced params and model tweaks. ALBERT-xxl (235M) beats BERT-large (335M) and RoBERTa-base.

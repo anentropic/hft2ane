@@ -2,49 +2,39 @@
 # For licensing see accompanying LICENSE.md file.
 # Copyright (C) 2022 Apple Inc. All Rights Reserved.
 #
-import warnings
-
-from ane_transformers.reference.layer_norm import LayerNormANE
 
 import torch
 import torch.nn as nn
-
+from ane_transformers.reference.layer_norm import LayerNormANE
 from transformers.models.distilbert import modeling_distilbert
+
+from hft2ane.models._common import (
+    EPS,
+    WARN_MSG_FOR_DICT_RETURN,
+    WARN_MSG_FOR_TRAINING_ATTEMPT,
+    correct_for_bias_scale_order_inversion,
+    last_conv2d_reshape,
+    ANEMixin,
+)
 
 
 MODEL_TYPE = "distilbert"
 
 
-# Note: Original implementation of distilbert uses an epsilon value of 1e-12
-# which is not friendly with the float16 precision that ANE uses by default
-EPS = 1e-7
-
-WARN_MSG_FOR_TRAINING_ATTEMPT = (
-    "This model is optimized for on-device execution only. "
-    "Please use the original implementation from Hugging Face for training"
-)
-
-WARN_MSG_FOR_DICT_RETURN = (
-    "coremltools does not support dict outputs. Please set return_dict=False"
-)
-
-
-# Note: torch.nn.LayerNorm and ane_transformers.reference.layer_norm.LayerNormANE
-# apply scale and bias terms in opposite orders. In order to accurately restore a
-# state_dict trained using the former into the the latter, we adjust the bias term
-def correct_for_bias_scale_order_inversion(
-    state_dict,
-    prefix,
-    local_metadata,
-    strict,
-    missing_keys,
-    unexpected_keys,
-    error_msgs,
-):
-    state_dict[prefix + "bias"] = (
-        state_dict[prefix + "bias"] / state_dict[prefix + "weight"]
-    )
-    return state_dict
+class ANEDistilBertMixin(ANEMixin):
+    _linear_to_conv2d_layers = [
+        "q_lin.weight",
+        "k_lin.weight",
+        "v_lin.weight",
+        "out_lin.weight",
+        "lin1.weight",
+        "lin2.weight",
+        "classifier.weight",
+        "pre_classifier.weight",
+        "vocab_transform.weight",
+        "vocab_projector.weight",
+        "qa_outputs.weight",
+    ]
 
 
 class LayerNormANE(LayerNormANE):
@@ -245,58 +235,6 @@ class Transformer(modeling_distilbert.Transformer):
         )
 
 
-class ANEDistilBertMixin:
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # Register hook for unsqueezing nn.Linear parameters to match nn.Conv2d parameter spec
-        self._register_load_state_dict_pre_hook(linear_to_conv2d_map)
-
-    def _tie_or_clone_weights(self, output_embeddings, input_embeddings):
-        """
-        Tie or clone module weights depending of whether we are using TorchScript or not
-        """
-        # hft2ane: added this logic to unsqueeze input where the output is a Conv2d
-        if input_embeddings.weight.shape != output_embeddings.weight.shape:
-            if (
-                len(input_embeddings.weight.shape) == 2
-                and len(output_embeddings.weight.shape) == 4
-            ):
-                normalised_input_weight = nn.Parameter(
-                    input_embeddings.weight.unsqueeze(-1).unsqueeze(-1)
-                )
-            else:
-                warnings.warn(
-                    f"Input and output embeddings should have the same shape or be "
-                    f"expandable to the same shape (e.g. ANE unsqueeze to 4D). "
-                    f"But got the shapes of input: {input_embeddings.weight.shape} and "
-                    f"output: {output_embeddings.weight.shape}"
-                )
-        else:
-            normalised_input_weight = input_embeddings.weight
-
-        # rest of logic as in huggingface...
-        if self.config.torchscript:
-            output_embeddings.weight = nn.Parameter(normalised_input_weight.clone())
-        else:
-            output_embeddings.weight = normalised_input_weight
-
-        if getattr(output_embeddings, "bias", None) is not None:
-            output_embeddings.bias.data = nn.functional.pad(
-                output_embeddings.bias.data,
-                (
-                    0,
-                    output_embeddings.weight.shape[0] - output_embeddings.bias.shape[0],
-                ),
-                "constant",
-                0,
-            )
-        if hasattr(output_embeddings, "out_features") and hasattr(
-            input_embeddings, "num_embeddings"
-        ):
-            output_embeddings.out_features = input_embeddings.num_embeddings
-
-
 class DistilBertModel(ANEDistilBertMixin, modeling_distilbert.DistilBertModel):
     def __init__(self, config):
         super().__init__(config)
@@ -359,8 +297,8 @@ class DistilBertForMaskedLM(
             prediction_logits
         )  # (bs, dim, 1, seq_len)
         # hft2ane: tweaked here vs ane_transformers to match expected output shape
-        prediction_logits = prediction_logits.squeeze(2).permute(
-            0, 2, 1
+        prediction_logits = last_conv2d_reshape(
+            prediction_logits
         )  # (bs, dim, vocab_size)
 
         output = (prediction_logits,) + dlbrt_output[1:]
@@ -465,13 +403,16 @@ class DistilBertForQuestionAnswering(
         start_logits, end_logits = logits.split(
             1, dim=1
         )  # (bs, 1, 1, max_query_len) * 2
-        start_logits = start_logits.squeeze().contiguous()  # (bs, max_query_len)
-        end_logits = end_logits.squeeze().contiguous()  # (bs, max_query_len)
+        start_logits = (
+            start_logits.squeeze(1).squeeze(1).contiguous()
+        )  # (bs, max_query_len)
+        end_logits = (
+            end_logits.squeeze(1).squeeze(1).contiguous()
+        )  # (bs, max_query_len)
 
         output = (start_logits, end_logits) + distilbert_output[1:]
-        total_loss = None
 
-        return ((total_loss,) + output) if total_loss is not None else output
+        return output
 
 
 class DistilBertForTokenClassification(
@@ -514,7 +455,7 @@ class DistilBertForTokenClassification(
 
         sequence_output = outputs[0]  # (bs, dim, 1, seq_len)
         logits = self.classifier(sequence_output)  # (bs, num_labels, 1, seq_len)
-        logits = logits.squeeze(2).transpose(1, 2)  # (bs, seq_len, num_labels)
+        logits = last_conv2d_reshape(logits)  # (bs, seq_len, num_labels)
 
         output = (logits,) + outputs[1:]
         loss = None
@@ -593,26 +534,3 @@ class DistilBertForMultipleChoice(
         loss = None
 
         return ((loss,) + output) if loss is not None else output
-
-
-_LINEAR_TO_CONV2D_LAYERS = [
-    "q_lin.weight",
-    "k_lin.weight",
-    "v_lin.weight",
-    "out_lin.weight",
-    "lin1.weight",
-    "lin2.weight",
-    "classifier.weight",
-    "pre_classifier.weight",
-    "vocab_transform.weight",
-    "vocab_projector.weight",
-    "qa_outputs.weight",
-]
-
-
-def linear_to_conv2d_map(state_dict, *args, **kwargs):
-    """Unsqueeze twice to map nn.Linear weights to nn.Conv2d weights"""
-    for k in state_dict:
-        if any(k.endswith(layer) for layer in _LINEAR_TO_CONV2D_LAYERS):
-            if len(state_dict[k].shape) == 2:
-                state_dict[k] = state_dict[k][:, :, None, None]

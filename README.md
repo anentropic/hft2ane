@@ -25,14 +25,25 @@ This should probably be installed via `pipx`.
 
 ### Supported model types
 
-The process of translating models from HF `transformers` into ANE-friendly form is manual. Pull requests implementing further model types are very welcome!
+The process of translating models from HF `transformers` into ANE-friendly form is manual and a bit tedious. Pull requests implementing further model types are very welcome!
 
 Currently `hft2ane` supports:
 
 - DistilBERT
+- BERT (TODO: cross-attention, i.e. EncoderDecoder model support)
 
 ## TODO
 
 - `ane_transformers` is currently pinned to PyTorch `<=1.11.0`. This means we can't load and convert any models which use PyTorch 2+ features. See https://github.com/apple/ml-ane-transformers/pull/3
-  - it also has another bug we already monkey-patched around, the future might be to vendor a forked version into the project
+  - due to bugs in their DistilBERT, and factoring out some common stuff after implementing BERT, there is very little we're importing from that lib (just the `LayerNormANE` class and the `compute_psnr` test util)... we could easily just vendor those in and drop the dependency
+  - there's a few places where PyTorch 2's new `squeeze` with tuple of dims would allow us to remove a double squeeze
 - Can we make use of this https://github.com/huggingface/exporters
+
+### NOTE re asitop logs
+
+These can accumulate massively... I just deleted > 40GB of asitop logs from `/private/tmp` (!)
+
+If you find yourself running out of storage:
+- `brew install ncdu`
+- `sudo ncdu /private`
+- `d` to delete
