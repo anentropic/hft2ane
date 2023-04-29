@@ -29,6 +29,7 @@ Ones that look interesting to me...
   - see https://github.com/anentropic/experiments-coreml-gpt2#update for notes and related models
 - **BART** is to BERT as T5 is to GPT (i.e. encoder-decoder vs encoder-only)
   - https://huggingface.co/Babelscape/rebel-large a BART that extracts knowledge-graph triples
+  - https://huggingface.co/facebook/bart-large-mnli does "Zero-Shot Classification"
 - **SAM (Segment Anything)**
   - "The image encoder has 632M parameters. The prompt encoder and mask decoder have 4M parameters."
   - model is Apache 2.0 license 🎉

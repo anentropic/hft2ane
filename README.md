@@ -30,7 +30,8 @@ The process of translating models from HF `transformers` into ANE-friendly form 
 Currently `hft2ane` supports:
 
 - DistilBERT
-- BERT (TODO: cross-attention, i.e. EncoderDecoder model support)
+- BERT (TODO: cross-attention, i.e. EncoderDecoderModel support)
+- RoBERTa (TODO: CausalLM and EncoderDecoderModel support)
 
 ## TODO
 

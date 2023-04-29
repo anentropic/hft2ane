@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 from ane_transformers.reference.layer_norm import LayerNormANE
 from transformers.configuration_utils import PretrainedConfig
-from transformers.models.bert import modeling_bert
+from transformers.models.roberta import modeling_roberta
 
 from hft2ane.models._common import (
     EPS,
@@ -16,10 +16,10 @@ from hft2ane.models._common import (
 )
 
 
-MODEL_TYPE = "bert"
+MODEL_TYPE = "roberta"
 
 
-class ANEBertMixin(ANEMixin):
+class ANERobertaMixin(ANEMixin):
     _linear_to_conv2d_layers = [
         "query.weight",
         "key.weight",
@@ -28,6 +28,7 @@ class ANEBertMixin(ANEMixin):
         "decoder.weight",
         "seq_relationship.weight",
         "classifier.weight",
+        "classifier.out_proj.weight",
         "qa_outputs.weight",
     ]
 
@@ -38,7 +39,7 @@ class LayerNormANE(LayerNormANE):
         self._register_load_state_dict_pre_hook(correct_for_bias_scale_order_inversion)
 
 
-class BertEmbeddings(modeling_bert.BertEmbeddings):
+class RobertaEmbeddings(modeling_roberta.RobertaEmbeddings):
     """
     Embeddings module optimized for Apple Neural Engine
     """
@@ -48,7 +49,7 @@ class BertEmbeddings(modeling_bert.BertEmbeddings):
         setattr(self, "LayerNorm", LayerNormANE(config.hidden_size, eps=EPS))
 
 
-class BertSelfAttention(modeling_bert.BertSelfAttention):
+class RobertaSelfAttention(modeling_roberta.RobertaSelfAttention):
     def __init__(self, config: PretrainedConfig, position_embedding_type=None):
         super().__init__(config, position_embedding_type=position_embedding_type)
         setattr(
@@ -121,9 +122,6 @@ class BertSelfAttention(modeling_bert.BertSelfAttention):
             raise NotImplementedError(
                 "Only absolute position embeddings are implemented"
             )
-        if self.is_decoder:
-            # relates to cross-attention and use_cache
-            raise NotImplementedError("Decoder is not implemented")
         if head_mask is not None:
             raise NotImplementedError
 
@@ -131,6 +129,9 @@ class BertSelfAttention(modeling_bert.BertSelfAttention):
         q = self.query(hidden_states)
         k = self.key(hidden_states)
         v = self.value(hidden_states)
+
+        if self.is_decoder:
+            past_key_value = (k, v)
 
         # Validate mask
         if attention_mask is not None:
@@ -144,14 +145,17 @@ class BertSelfAttention(modeling_bert.BertSelfAttention):
             if len(attention_mask.size()) == 2:
                 attention_mask = attention_mask.unsqueeze(2).unsqueeze(2)
 
-            # hft2ane: updated to match observed shape
+            # hft2ane: updated to match observed shape (copied from BERT)
             expected_mask_shape = [bs, 1, 1, seqlen]
+            # TODO: when Causal LM gets here, HF roberta shape is this:
+            # expected_mask_shape = [bs, 1, seqlen, seqlen]
             if list(attention_mask.size()) != expected_mask_shape:
                 raise RuntimeError(
                     f"Invalid shape for `mask` (Expected {expected_mask_shape}, got {list(attention_mask.size())}"
                 )
-            # hft2ane: permuted to match original expected shape
+            # hft2ane: permuted to match original expected shape (copied from BERT)
             attention_mask = attention_mask.permute(0, 3, 1, 2)
+            # TODO: probably not wanted for Causal LM
 
         # Compute scaled dot-product attention
         dim_per_head = self.attention_head_size
@@ -198,7 +202,7 @@ class BertSelfAttention(modeling_bert.BertSelfAttention):
         return outputs
 
 
-class BertSelfOutput(modeling_bert.BertSelfOutput):
+class RobertaSelfOutput(modeling_roberta.RobertaSelfOutput):
     def __init__(self, config):
         super().__init__(config)
         setattr(
@@ -213,21 +217,23 @@ class BertSelfOutput(modeling_bert.BertSelfOutput):
         setattr(self, "LayerNorm", LayerNormANE(config.hidden_size, eps=EPS))
 
 
-class BertAttention(modeling_bert.BertAttention):
+class RobertaAttention(modeling_roberta.RobertaAttention):
     def __init__(self, config: PretrainedConfig, position_embedding_type=None):
         super().__init__(config, position_embedding_type=position_embedding_type)
         setattr(
             self,
             "self",
-            BertSelfAttention(config, position_embedding_type=position_embedding_type),
+            RobertaSelfAttention(
+                config, position_embedding_type=position_embedding_type
+            ),
         )
-        setattr(self, "output", BertSelfOutput(config))
+        setattr(self, "output", RobertaSelfOutput(config))
 
     def prune_heads(self, heads):
         raise NotImplementedError
 
 
-class BertIntermediate(modeling_bert.BertIntermediate):
+class RobertaIntermediate(modeling_roberta.RobertaIntermediate):
     def __init__(self, config: PretrainedConfig):
         super().__init__(config)
         setattr(
@@ -241,7 +247,7 @@ class BertIntermediate(modeling_bert.BertIntermediate):
         )
 
 
-class BertOutput(modeling_bert.BertOutput):
+class RobertaOutput(modeling_roberta.RobertaOutput):
     def __init__(self, config: PretrainedConfig):
         super().__init__(config)
         setattr(
@@ -256,31 +262,33 @@ class BertOutput(modeling_bert.BertOutput):
         setattr(self, "LayerNorm", LayerNormANE(config.hidden_size, eps=EPS))
 
 
-class BertLayer(modeling_bert.BertLayer):
+class RobertaLayer(modeling_roberta.RobertaLayer):
     def __init__(self, config: PretrainedConfig):
         super().__init__(config)
-        setattr(self, "attention", BertAttention(config))
+        setattr(self, "attention", RobertaAttention(config))
         if hasattr(self, "crossattention"):
             setattr(
                 self,
                 "crossattention",
-                BertAttention(config, position_embedding_type="absolute"),
+                RobertaAttention(config, position_embedding_type="absolute"),
             )
-        setattr(self, "intermediate", BertIntermediate(config))
-        setattr(self, "output", BertOutput(config))
+        setattr(self, "intermediate", RobertaIntermediate(config))
+        setattr(self, "output", RobertaOutput(config))
 
 
-class BertEncoder(modeling_bert.BertEncoder):
+class RobertaEncoder(modeling_roberta.RobertaEncoder):
     def __init__(self, config: PretrainedConfig):
         super().__init__(config)
         setattr(
             self,
             "layer",
-            nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)]),
+            nn.ModuleList(
+                [RobertaLayer(config) for _ in range(config.num_hidden_layers)]
+            ),
         )
 
 
-class BertPooler(modeling_bert.BertPooler):
+class RobertaPooler(modeling_roberta.RobertaPooler):
     def __init__(self, config: PretrainedConfig):
         super().__init__(config)
         setattr(
@@ -301,119 +309,72 @@ class BertPooler(modeling_bert.BertPooler):
         return pooled_output
 
 
-class BertPredictionHeadTransform(modeling_bert.BertPredictionHeadTransform):
-    def __init__(self, config: PretrainedConfig):
-        super().__init__(config)
-        setattr(
-            self,
-            "dense",
-            nn.Conv2d(
-                in_channels=config.hidden_size,
-                out_channels=config.hidden_size,
-                kernel_size=1,
-            ),
-        )
-        setattr(self, "LayerNorm", LayerNormANE(config.hidden_size, eps=EPS))
-
-
-class BertLMPredictionHead(modeling_bert.BertLMPredictionHead):
-    def __init__(self, config: PretrainedConfig):
-        super().__init__(config)
-        setattr(self, "transform", BertPredictionHeadTransform(config))
-        setattr(
-            self,
-            "decoder",
-            nn.Conv2d(
-                in_channels=config.hidden_size,
-                out_channels=config.vocab_size,
-                kernel_size=1,
-                bias=False,
-            ),
-        )
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def forward(self, hidden_states):
-        hidden_states = super().forward(hidden_states)
-        hidden_states = last_conv2d_reshape(hidden_states)
-        return hidden_states
-
-
-class BertOnlyMLMHead(modeling_bert.BertOnlyMLMHead):
-    def __init__(self, config: PretrainedConfig):
-        super().__init__(config)
-        setattr(self, "predictions", BertLMPredictionHead(config))
-
-
-class BertOnlyNSPHead(modeling_bert.BertOnlyNSPHead):
-    def __init__(self, config: PretrainedConfig):
-        super().__init__(config)
-        setattr(
-            self,
-            "seq_relationship",
-            nn.Conv2d(
-                in_channels=config.hidden_size,
-                out_channels=2,
-                kernel_size=1,
-            ),
-        )
-
-    def forward(self, pooled_output):
-        seq_relationship_score = self.seq_relationship(pooled_output)
-        # hft2ane:
-        seq_relationship_score = seq_relationship_score.squeeze(-1).squeeze(-1)
-        return seq_relationship_score
-
-
-class BertModel(ANEBertMixin, modeling_bert.BertModel):
+class RobertaModel(ANERobertaMixin, modeling_roberta.RobertaModel):
     def __init__(self, config: PretrainedConfig, add_pooling_layer=True):
         super().__init__(config, add_pooling_layer=add_pooling_layer)
-        setattr(self, "embeddings", BertEmbeddings(config))
-        setattr(self, "encoder", BertEncoder(config))
+        setattr(self, "embeddings", RobertaEmbeddings(config))
+        setattr(self, "encoder", RobertaEncoder(config))
         if self.pooler:
-            setattr(self, "pooler", BertPooler(config))
+            setattr(self, "pooler", RobertaPooler(config))
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError
 
 
-class BertLMHeadModel(ANEBertMixin, modeling_bert.BertLMHeadModel):
+class RobertaForCausalLM(ANERobertaMixin, modeling_roberta.RobertaForCausalLM):
+    def __init__(self, config):
+        super().__init__(config)
+        setattr(self, "roberta", RobertaModel(config, add_pooling_layer=False))
+        setattr(self, "lm_head", RobertaLMHead(config))
+
+
+class RobertaForMaskedLM(ANERobertaMixin, modeling_roberta.RobertaForMaskedLM):
     def __init__(self, config: PretrainedConfig):
         super().__init__(config)
-        setattr(self, "bert", BertModel(config, add_pooling_layer=False))
-        setattr(self, "cls", BertOnlyMLMHead(config))
+        setattr(self, "roberta", RobertaModel(config, add_pooling_layer=False))
+        setattr(self, "lm_head", RobertaLMHead(config))
 
 
-class BertForMaskedLM(ANEBertMixin, modeling_bert.BertForMaskedLM):
+class RobertaLMHead(ANERobertaMixin, modeling_roberta.RobertaLMHead):
     def __init__(self, config: PretrainedConfig):
         super().__init__(config)
-        setattr(self, "bert", BertModel(config, add_pooling_layer=False))
-        setattr(self, "cls", BertOnlyMLMHead(config))
+        setattr(
+            self,
+            "dense",
+            nn.Conv2d(config.hidden_size, config.hidden_size, kernel_size=1),
+        )
+        setattr(
+            self,
+            "layer_norm",
+            LayerNormANE(config.hidden_size, eps=config.layer_norm_eps),
+        )
+        setattr(
+            self,
+            "decoder",
+            nn.Conv2d(config.hidden_size, config.vocab_size, kernel_size=1),
+        )
+
+    def forward(self, features, **kwargs):
+        x = super().forward(features, **kwargs)
+        # OG: torch.Size([1, 8, 50265])
+        if x.shape[2] > 1:
+            # TODO: this looks right for Causal LM
+            x = x[:, :, 0, :].permute(0, 2, 1)
+        else:
+            x = last_conv2d_reshape(x)
+        return x
 
 
-class BertForNextSentencePrediction(
-    ANEBertMixin, modeling_bert.BertForNextSentencePrediction
+class RobertaForSequenceClassification(
+    ANERobertaMixin, modeling_roberta.RobertaForSequenceClassification
 ):
     def __init__(self, config: PretrainedConfig):
         super().__init__(config)
-        setattr(self, "bert", BertModel(config))
-        setattr(self, "cls", BertOnlyNSPHead(config))
-
-
-class BertForSequenceClassification(
-    ANEBertMixin, modeling_bert.BertForSequenceClassification
-):
-    def __init__(self, config: PretrainedConfig):
-        super().__init__(config)
-        setattr(self, "bert", BertModel(config))
+        setattr(self, "roberta", RobertaModel(config, add_pooling_layer=False))
         setattr(
             self,
             "classifier",
-            nn.Conv2d(
-                in_channels=config.hidden_size,
-                out_channels=config.num_labels,
-                kernel_size=1,
-            ),
+            RobertaClassificationHead(config),
         )
 
     def forward(
@@ -445,7 +406,7 @@ class BertForSequenceClassification(
         if return_dict:
             raise ValueError(WARN_MSG_FOR_DICT_RETURN)
 
-        outputs = self.bert(
+        outputs = self.roberta(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -457,20 +418,19 @@ class BertForSequenceClassification(
             return_dict=return_dict,
         )
 
-        pooled_output = outputs[1]
-
-        pooled_output = self.dropout(pooled_output)
-        logits = self.classifier(pooled_output)
-        logits = logits.squeeze(-1).squeeze(-1)  # (bs, num_labels)
+        sequence_output = outputs[0]
+        logits = self.classifier(sequence_output)
 
         output = (logits,) + outputs[2:]
         return output
 
 
-class BertForMultipleChoice(ANEBertMixin, modeling_bert.BertForMultipleChoice):
+class RobertaForMultipleChoice(
+    ANERobertaMixin, modeling_roberta.RobertaForMultipleChoice
+):
     def __init__(self, config: PretrainedConfig):
         super().__init__(config)
-        setattr(self, "bert", BertModel(config))
+        setattr(self, "roberta", RobertaModel(config))
         setattr(
             self,
             "classifier",
@@ -482,12 +442,12 @@ class BertForMultipleChoice(ANEBertMixin, modeling_bert.BertForMultipleChoice):
         )
 
 
-class BertForTokenClassification(
-    ANEBertMixin, modeling_bert.BertForTokenClassification
+class RobertaForTokenClassification(
+    ANERobertaMixin, modeling_roberta.RobertaForTokenClassification
 ):
     def __init__(self, config: PretrainedConfig):
         super().__init__(config)
-        setattr(self, "bert", BertModel(config, add_pooling_layer=False))
+        setattr(self, "roberta", RobertaModel(config, add_pooling_layer=False))
         setattr(
             self,
             "classifier",
@@ -500,13 +460,13 @@ class BertForTokenClassification(
 
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -525,7 +485,7 @@ class BertForTokenClassification(
         if return_dict:
             raise ValueError(WARN_MSG_FOR_DICT_RETURN)
 
-        outputs = self.bert(
+        outputs = self.roberta(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -547,10 +507,40 @@ class BertForTokenClassification(
         return output
 
 
-class BertForQuestionAnswering(ANEBertMixin, modeling_bert.BertForQuestionAnswering):
+class RobertaClassificationHead(
+    ANERobertaMixin, modeling_roberta.RobertaClassificationHead
+):
+    """Head for sentence-level classification tasks."""
+
+    def __init__(self, config):
+        super().__init__(config)
+        setattr(
+            self,
+            "dense",
+            nn.Conv2d(config.hidden_size, config.hidden_size, kernel_size=1),
+        )
+        setattr(
+            self,
+            "out_proj",
+            nn.Conv2d(config.hidden_size, config.num_labels, kernel_size=1),
+        )
+
+    def forward(self, features, **kwargs):
+        x = features[:, :, :, 0].unsqueeze(-1)  # hft2ane
+        x = self.dropout(x)
+        x = self.dense(x)
+        x = torch.tanh(x)
+        x = self.dropout(x)
+        x = self.out_proj(x)
+        return x.squeeze(-1).squeeze(-1)  # hft2ane
+
+
+class RobertaForQuestionAnswering(
+    ANERobertaMixin, modeling_roberta.RobertaForQuestionAnswering
+):
     def __init__(self, config: PretrainedConfig):
         super().__init__(config)
-        setattr(self, "bert", BertModel(config, add_pooling_layer=False))
+        setattr(self, "roberta", RobertaModel(config, add_pooling_layer=False))
         setattr(
             self,
             "qa_outputs",
@@ -563,14 +553,14 @@ class BertForQuestionAnswering(ANEBertMixin, modeling_bert.BertForQuestionAnswer
 
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        start_positions: Optional[torch.Tensor] = None,
-        end_positions: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        start_positions: Optional[torch.LongTensor] = None,
+        end_positions: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -595,7 +585,7 @@ class BertForQuestionAnswering(ANEBertMixin, modeling_bert.BertForQuestionAnswer
         if return_dict:
             raise ValueError(WARN_MSG_FOR_DICT_RETURN)
 
-        outputs = self.bert(
+        outputs = self.roberta(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,

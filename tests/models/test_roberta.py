@@ -5,63 +5,53 @@ import torch
 from ane_transformers.testing_utils import compute_psnr
 from transformers import (
     AutoTokenizer,
-    BertForSequenceClassification as HF_BertForSequenceClassification,
-    BertForMaskedLM as HF_BertForMaskedLM,
-    BertForQuestionAnswering as HF_BertForQuestionAnswering,
-    BertForTokenClassification as HF_BertForTokenClassification,
-    BertForMultipleChoice as HF_BertForMultipleChoice,
-    BertForNextSentencePrediction as HF_BertForNextSentencePrediction,
+    RobertaForSequenceClassification as HF_RobertaForSequenceClassification,
+    RobertaForMaskedLM as HF_RobertaForMaskedLM,
+    RobertaForQuestionAnswering as HF_RobertaForQuestionAnswering,
+    RobertaForTokenClassification as HF_RobertaForTokenClassification,
+    RobertaForMultipleChoice as HF_RobertaForMultipleChoice,
+    RobertaForCausalLM as HF_RobertaForCausalLM,
     PreTrainedTokenizer,
 )
 
-from hft2ane.models.bert import (
-    BertForSequenceClassification,
-    BertForMaskedLM,
-    BertForQuestionAnswering,
-    BertForTokenClassification,
-    BertForMultipleChoice,
-    BertForNextSentencePrediction,
+from hft2ane.models.roberta import (
+    RobertaForSequenceClassification,
+    RobertaForMaskedLM,
+    RobertaForQuestionAnswering,
+    RobertaForTokenClassification,
+    RobertaForMultipleChoice,
+    RobertaForCausalLM,
 )
 
 
 TEST_MAX_SEQ_LEN = 256
 PSNR_THRESHOLD = 60
 
-SEQUENCE_CLASSIFICATION_MODEL = 'ModelTC/bert-base-uncased-sst2'  # textattack/bert-base-uncased-yelp-polarity
-MASKED_LM_MODEL = 'bert-base-uncased'
-NSP_MODEL = 'bert-base-uncased'
-QUESTION_ANSWERING_MODEL = 'csarron/bert-base-uncased-squad-v1'  # deepset/bert-base-cased-squad2
-TOKEN_CLASSIFICATION_MODEL = 'dslim/bert-base-NER-uncased'  # dbmdz/bert-large-cased-finetuned-conll03-english
-MULTIPLE_CHOICE_MODEL = 'ehdwns1516/bert-base-uncased_SWAG'
+SEQUENCE_CLASSIFICATION_MODEL = 'WillHeld/roberta-base-sst2'
+MASKED_LM_MODEL = 'roberta-base'
+QUESTION_ANSWERING_MODEL = 'deepset/roberta-base-squad2'
+TOKEN_CLASSIFICATION_MODEL = 'Jean-Baptiste/roberta-large-ner-english'
+MULTIPLE_CHOICE_MODEL = 'nmb-paperspace-hf/roberta-base-finetuned-swag'
+CAUSAL_LM_MODEL = 'GItaf/roberta-base-finetuned-mbti-0901'
 
 
 @pytest.fixture(scope="session")
 def masked_lm():
     tokenizer = AutoTokenizer.from_pretrained(MASKED_LM_MODEL)
-    hf_model = HF_BertForMaskedLM.from_pretrained(
+    hf_model = HF_RobertaForMaskedLM.from_pretrained(
         MASKED_LM_MODEL, return_dict=False).eval()
-    ane_model = BertForMaskedLM.from_pretrained(
+    ane_model = RobertaForMaskedLM.from_pretrained(
         MASKED_LM_MODEL, return_dict=False).eval()
-    return tokenizer, hf_model, ane_model
-
-
-@pytest.fixture(scope="session")
-def next_sentence_prediction():
-    tokenizer = AutoTokenizer.from_pretrained(NSP_MODEL)
-    hf_model = HF_BertForNextSentencePrediction.from_pretrained(
-        NSP_MODEL, return_dict=False).eval()
-    ane_model = BertForNextSentencePrediction.from_pretrained(
-        NSP_MODEL, return_dict=False).eval()
     return tokenizer, hf_model, ane_model
 
 
 @pytest.fixture(scope="session")
 def sequence_classification():
     tokenizer = AutoTokenizer.from_pretrained(SEQUENCE_CLASSIFICATION_MODEL)
-    hf_model = HF_BertForSequenceClassification.from_pretrained(
+    hf_model = HF_RobertaForSequenceClassification.from_pretrained(
         SEQUENCE_CLASSIFICATION_MODEL, return_dict=False
     ).eval()
-    ane_model = BertForSequenceClassification.from_pretrained(
+    ane_model = RobertaForSequenceClassification.from_pretrained(
         SEQUENCE_CLASSIFICATION_MODEL, return_dict=False
     ).eval()
     return tokenizer, hf_model, ane_model
@@ -70,9 +60,9 @@ def sequence_classification():
 @pytest.fixture(scope="session")
 def question_answering():
     tokenizer = AutoTokenizer.from_pretrained(QUESTION_ANSWERING_MODEL)
-    hf_model = HF_BertForQuestionAnswering.from_pretrained(
+    hf_model = HF_RobertaForQuestionAnswering.from_pretrained(
         QUESTION_ANSWERING_MODEL, return_dict=False).eval()
-    ane_model = BertForQuestionAnswering.from_pretrained(
+    ane_model = RobertaForQuestionAnswering.from_pretrained(
         QUESTION_ANSWERING_MODEL, return_dict=False).eval()
     return tokenizer, hf_model, ane_model
 
@@ -80,9 +70,9 @@ def question_answering():
 @pytest.fixture(scope="session")
 def token_classification():
     tokenizer = AutoTokenizer.from_pretrained(TOKEN_CLASSIFICATION_MODEL)
-    hf_model = HF_BertForTokenClassification.from_pretrained(
+    hf_model = HF_RobertaForTokenClassification.from_pretrained(
         TOKEN_CLASSIFICATION_MODEL, return_dict=False).eval()
-    ane_model = BertForTokenClassification.from_pretrained(
+    ane_model = RobertaForTokenClassification.from_pretrained(
         TOKEN_CLASSIFICATION_MODEL, return_dict=False).eval()
     return tokenizer, hf_model, ane_model
 
@@ -90,10 +80,20 @@ def token_classification():
 @pytest.fixture(scope="session")
 def multiple_choice():
     tokenizer = AutoTokenizer.from_pretrained(MULTIPLE_CHOICE_MODEL)
-    hf_model = HF_BertForMultipleChoice.from_pretrained(
+    hf_model = HF_RobertaForMultipleChoice.from_pretrained(
         MULTIPLE_CHOICE_MODEL, return_dict=False).eval()
-    ane_model = BertForMultipleChoice.from_pretrained(
+    ane_model = RobertaForMultipleChoice.from_pretrained(
         MULTIPLE_CHOICE_MODEL, return_dict=False).eval()
+    return tokenizer, hf_model, ane_model
+
+
+@pytest.fixture(scope="session")
+def causal_lm():
+    tokenizer = AutoTokenizer.from_pretrained(CAUSAL_LM_MODEL)
+    hf_model = HF_RobertaForCausalLM.from_pretrained(
+        CAUSAL_LM_MODEL, return_dict=False).eval()
+    ane_model = RobertaForCausalLM.from_pretrained(
+        CAUSAL_LM_MODEL, return_dict=False).eval()
     return tokenizer, hf_model, ane_model
 
 
@@ -103,7 +103,8 @@ def _np_probs(logits: torch.Tensor) -> np.ndarray:
 
 def _decode_masked(output_logits: torch.Tensor, tokenizer: PreTrainedTokenizer, masked_index: int) -> str:
     predicted_index = torch.argmax(output_logits[0], dim=1)[masked_index].item()
-    return tokenizer.convert_ids_to_tokens([predicted_index])[0]
+    tokens = tokenizer.convert_ids_to_tokens([predicted_index])[0]
+    return tokenizer.convert_tokens_to_string([tokens])
 
 
 def _get_class_index(output_logits: torch.Tensor, id2label: dict[int, str | int]) -> str | int:
@@ -121,7 +122,10 @@ def _get_labelled_tokens(output_logits: torch.Tensor, input_str: str, id2label: 
     # NOTE: The first and last tokens of `predicted_labels` are [CLS] and [SEP] respectively
     predicted_labels = torch.argmax(output_logits, dim=2)
     labels = [id2label[label_id] for label_id in predicted_labels[0].tolist()]
-    tokens = tokenizer.tokenize(input_str)
+    tokens = map(
+        lambda s: tokenizer.convert_tokens_to_string([s]),
+        tokenizer.tokenize(input_str)
+    )
     return [(token, label) for token, label in zip(tokens, labels[1:-1])]
 
 
@@ -129,26 +133,21 @@ def _get_choice(output_logits: torch.Tensor, choices: list[str]) -> str:
     return choices[torch.argmax(output_logits)]
 
 
-def _decode_nsp(scores: torch.Tensor) -> bool:
-    probabilities = torch.softmax(scores, dim=1)
-    prediction = torch.argmax(probabilities)
-    # 0 = yes, 1 = no
-    return prediction.item() == 0
+def _decode_causal_lm(output_ids: torch.Tensor, tokenizer: PreTrainedTokenizer) -> str:
+    return tokenizer.decode(output_ids.squeeze(), skip_special_tokens=True)
 
 
-# NOTE: bert-base-uncased does not do very well, other simple phrases
-# gave bad results, bert-large does better
 @pytest.mark.parametrize(
     "input_str,expected_output",
     [
-        ("Hello how [MASK] you doing?", "are"),
-        ("Hello how are [MASK] doing?", "you"),
+        ("Hello how <mask> you doing?", " are"),
+        ("Hello how are <mask> doing?", " you"),
     ]
 )
 def test_masked_lm(input_str, expected_output, masked_lm):
     tokenizer, hf_model, ane_model = masked_lm
     tokenized_text = tokenizer.tokenize(input_str)
-    masked_index = tokenized_text.index('[MASK]')
+    masked_index = tokenized_text.index(' <mask>')
     indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
     tokens_tensor = torch.tensor([indexed_tokens])
 
@@ -165,41 +164,6 @@ def test_masked_lm(input_str, expected_output, masked_lm):
 
     hf_result = _decode_masked(hf_outputs[0], tokenizer, masked_index)
     ane_result = _decode_masked(ane_outputs[0], tokenizer, masked_index)
-    assert ane_result == hf_result
-    
-    assert ane_result == expected_output
-
-
-@pytest.mark.parametrize(
-    "sentence_a,sentence_b,expected_output",
-    [
-        ("How old are you?", "I am 21 years old.", True),
-        ("How old are you?", "Queen's University is in Kingston Ontario Canada", False),
-        (
-            "The sun is a huge ball of gases. It has a diameter of 1,392,000 km.",
-            "It is mainly made up of hydrogen and helium gas. The surface of the Sun is known as the photosphere.",
-            True
-        ),
-        ("The cat sat on the mat.", "It was a nice day outside.", True),
-    ]
-)
-def test_next_sentence_prediction(sentence_a, sentence_b, expected_output, next_sentence_prediction):
-    tokenizer, hf_model, ane_model = next_sentence_prediction
-    encoded = tokenizer(sentence_a, sentence_b, return_tensors='pt')
-
-    with torch.no_grad():
-        hf_outputs = hf_model(**encoded)
-        ane_outputs = ane_model(**encoded)
-
-    assert ane_outputs[0].shape == hf_outputs[0].shape
-
-    peak_signal_to_noise_ratio = compute_psnr(
-        _np_probs(hf_outputs[0]), _np_probs(ane_outputs[0])
-    )
-    assert peak_signal_to_noise_ratio > PSNR_THRESHOLD
-
-    hf_result = _decode_nsp(hf_outputs[0])
-    ane_result = _decode_nsp(ane_outputs[0])
     assert ane_result == hf_result
     
     assert ane_result == expected_output
@@ -250,11 +214,11 @@ QA_CONTEXT = """The Amazon rainforest (Portuguese: Floresta Amazônica or Amazô
     [
         (
             "How many square kilometers of rainforest is covered in the basin?",
-            "5, 500, 000",
+            " 5,500,000",
         ),
         (
             "Which name is also used to describe the Amazon rainforest in English?",
-            "amazonia or the amazon jungle",
+            " Amazonia or the Amazon Jungle",
         ),
     ]
 )
@@ -282,30 +246,30 @@ def test_question_answering(question, expected_output, question_answering):
     [
         (
             "My name is Sarah and I live in London",
-            [('my', 'O'),
-            ('name', 'O'),
-            ('is', 'O'),
-            ('sarah', 'B-PER'),
-            ('and', 'O'),
-            ('i', 'O'),
-            ('live', 'O'),
-            ('in', 'O'),
-            ('london', 'B-LOC')]
+            [(' My', 'O'),
+            (' name', 'O'),
+            (' is', 'O'),
+            (' Sarah', 'PER'),
+            (' and', 'O'),
+            (' I', 'O'),
+            (' live', 'O'),
+            (' in', 'O'),
+            (' London', 'LOC')]
         ),
         (
             "My name is Clara and I live in Berkeley, California.",
-            [('my', 'O'),
-            ('name', 'O'),
-            ('is', 'O'),
-            ('clara', 'B-PER'),
-            ('and', 'O'),
-            ('i', 'O'),
-            ('live', 'O'),
-            ('in', 'O'),
-            ('berkeley', 'B-LOC'),
+            [(' My', 'O'),
+            (' name', 'O'),
+            (' is', 'O'),
+            (' Clara', 'PER'),
+            (' and', 'O'),
+            (' I', 'O'),
+            (' live', 'O'),
+            (' in', 'O'),
+            (' Berkeley', 'LOC'),
             (',', 'O'),
-            ('california', 'B-LOC'),
-            ('.', 'O')]
+            (' California', 'LOC'),
+            ('.', 'LOC')]  # hmm
         ),
     ]
 )
@@ -374,4 +338,53 @@ def test_multiple_choice(input_str, choices, expected_output, multiple_choice):
     ane_result = _get_choice(ane_outputs[0], choices)
     assert ane_result == hf_result
 
+    assert ane_result == expected_output
+
+
+@pytest.mark.skip(reason="CausalLM needs use_cache and is_decoder support")
+@pytest.mark.parametrize(
+    "input_str,expected_output",
+    [
+        ("My name is Mariama, my favorite",
+         "My name is Mariama, my favorite anime series is shoujo yuara hanata"),
+        ("Once upon a time there was a wizened old crone",
+         "Once upon a time there was a wizened old crone who was a bit of a jerk"),
+    ]
+)
+def test_causal_lm(input_str, expected_output, causal_lm):
+    torch.manual_seed(42)
+    tokenizer, hf_model, ane_model = causal_lm
+    input_ids = tokenizer.encode(input_str, add_special_tokens=False, return_tensors='pt')
+
+    with torch.no_grad():
+        hf_output_ids = hf_model.generate(
+            input_ids=input_ids,
+            max_length=20,
+            do_sample=True,
+            top_p=0.95,
+            top_k=50,
+            temperature=0.7,
+            num_return_sequences=1,
+        )
+        ane_output_ids = ane_model.generate(
+            input_ids=input_ids,
+            max_length=20,
+            do_sample=True,
+            top_p=0.95,
+            top_k=50,
+            temperature=0.7,
+            num_return_sequences=1,
+        )
+
+    assert ane_output_ids.shape == hf_output_ids.shape
+
+    # peak_signal_to_noise_ratio = compute_psnr(
+    #     _np_probs(hf_output_ids), _np_probs(ane_output_ids)
+    # )
+    # assert peak_signal_to_noise_ratio > PSNR_THRESHOLD
+
+    hf_result = _decode_causal_lm(hf_output_ids, tokenizer)
+    ane_result = _decode_causal_lm(ane_output_ids, tokenizer)
+    assert ane_result == hf_result
+    
     assert ane_result == expected_output
