@@ -85,10 +85,11 @@ def _names_to_hft2ane_models() -> dict[str, list[Type[PreTrainedModel]]]:
 _BASE_NAMES_TO_ANETZ_MODELS = _names_to_hft2ane_models()
 
 
-def get_hft2ane_model_names(name: str) -> list[str]:
+def get_hft2ane_model_names(name: str) -> list[tuple[str, bool]]:
     """
     For most pre-trained model names on HuggingFace Hub, this function returns a
-    list of the corresponding hft2ane model classes valid for that model type.
+    list of the corresponding hft2ane model classes valid for that base model type
+    along with a flag indicating whether the class is the default for that model type.
 
     pre-trained models define specific model class/es to use, e.g.:
 
@@ -96,14 +97,16 @@ def get_hft2ane_model_names(name: str) -> list[str]:
         >>> model.config.architectures
         ['DistilBertForSequenceClassification']
 
+    NOTE: base models e.g. bert-base-uncased etc tend to specify a single architecture,
+    e.g. BertForMaskedLM, but they could be used in other ways.
+
     TODO: do all HF models define this attribute correctly?
     (i.e. would we ever need to allow manual override of this mapping?)
     """
     config = AutoConfig.from_pretrained(name)
     names = [
-        model.__name__
+        (model.__name__, model.__name__ in config.architectures)
         for model in _BASE_NAMES_TO_ANETZ_MODELS[config.model_type]
-        if model.__name__ in config.architectures
     ]
     if not names:
         raise ModelNotFoundError(f"Could not find hft2ane model matching: {name}")
@@ -135,12 +138,24 @@ def get_hf_auto_model(
     For a given HuggingFace model class, this function returns the corresponding
     HF AutoModel class, if there is one.
     """
-    try:
-        return _CONCRETE_TO_AUTO[model]
-    except KeyError:
-        raise ModelNotFoundError(
-            f"Could not find HF AutoModel matching: {model.__name__}"
-        )
+    if model._auto_class:
+        # this attr only exists for custom-code models (?)
+        if "." in model._auto_class:
+            # (not sure if this case exists?)
+            module_path, class_name = model._auto_class.rsplit(".", 1)
+            module = importlib.import_module(module_path)
+        else:
+            module = modeling_auto
+            class_name = model._auto_class
+        return getattr(module, class_name)
+    else:
+        # models using vanilla HF transformers classes
+        try:
+            return _CONCRETE_TO_AUTO[model]
+        except KeyError:
+            raise ModelNotFoundError(
+                f"Could not find HF AutoModel matching: {model.__name__}"
+            )
 
 
 _AUTO_MODEL_TO_OUTPUT = {
@@ -192,3 +207,48 @@ def get_output_for_auto_model(
         raise ModelNotFoundError(
             f"Could not find ModelOutput matching: {model.__name__}"
         )
+
+
+# https://github.com/huggingface/exporters/blob/7f82edfcda2fe39790f93ba5a9500866709fc71b/src/exporters/coreml/config.py#L704
+_CLASSIFIER_TASKS = {
+    "image-classification",
+    "multiple-choice",
+    "next-sentence-prediction",
+    "text-classification",
+    "token-classification",  # hft2ane
+}
+# https://github.com/huggingface/exporters/blob/7f82edfcda2fe39790f93ba5a9500866709fc71b/src/exporters/coreml/features.py#L103
+_TASKS_TO_AUTOMODELS = {
+    "feature-extraction": modeling_auto.AutoModel,
+    "text-generation": modeling_auto.AutoModelForCausalLM,
+    "automatic-speech-recognition": modeling_auto.AutoModelForCTC,
+    "image-classification": modeling_auto.AutoModelForImageClassification,
+    "image-segmentation": modeling_auto.AutoModelForImageSegmentation,
+    "masked-im": modeling_auto.AutoModelForMaskedImageModeling,
+    "fill-mask": modeling_auto.AutoModelForMaskedLM,
+    "multiple-choice": modeling_auto.AutoModelForMultipleChoice,
+    "next-sentence-prediction": modeling_auto.AutoModelForNextSentencePrediction,
+    "object-detection": modeling_auto.AutoModelForObjectDetection,
+    "question-answering": modeling_auto.AutoModelForQuestionAnswering,
+    "semantic-segmentation": modeling_auto.AutoModelForSemanticSegmentation,
+    "text2text-generation": modeling_auto.AutoModelForSeq2SeqLM,
+    "text-classification": modeling_auto.AutoModelForSequenceClassification,
+    "speech-seq2seq": modeling_auto.AutoModelForSpeechSeq2Seq,
+    "token-classification": modeling_auto.AutoModelForTokenClassification,
+}
+_AUTOMODELS_TO_TASKS = {v: k for k, v in _TASKS_TO_AUTOMODELS.items()}
+
+
+def is_classifier(model: Type[PreTrainedModel]):
+    """
+    Sadly there is no simple way to determine if a model is a classifier or not.
+    This heuristic is borrowed from huggingface `exporters`.
+
+    Unfortunately, PretrainedConfig gives all models two default labels:
+    https://github.com/huggingface/transformers/blob/92601d2eb1c30e9b4bc9562ec2206e432a646c4a/src/transformers/configuration_utils.py#L331
+    (a model would have to explicitly set id2label={} to override, most don't)
+    ...meaning we can't use id2label to determine if a model is a classifier or not.
+    """
+    automodel = get_hf_auto_model(model)
+    task = _AUTOMODELS_TO_TASKS[automodel]
+    return task in _CLASSIFIER_TASKS

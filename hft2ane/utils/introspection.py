@@ -1,4 +1,3 @@
-import importlib
 import warnings
 from contextlib import contextmanager
 from types import NoneType
@@ -123,16 +122,8 @@ def _get_by_model_outputs(model: torch.nn.Module) -> tuple[list[str], list[str]]
         model_output = model_outputs[0]
     if model_output is None:
         # infer from AutoModel type
-        if model._auto_class:
-            if "." in model._auto_class:
-                auto_model = importlib.import_module(model._auto_class)
-            else:
-                auto_model = importlib.import_module(
-                    model._auto_class, "transformers.models.auto.modeling_auto"
-                )
-        else:
-            auto_model = get_hf_auto_model(model)
-            model_output = get_output_for_auto_model(auto_model)
+        auto_model = get_hf_auto_model(model)
+        model_output = get_output_for_auto_model(auto_model)
     required_fields, optional_fields = _fields_from_model_output(model_output)
     # TODO: we'll only consider the required fields for now
     return list(model.dummy_inputs.keys()), list(required_fields.keys())

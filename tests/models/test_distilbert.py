@@ -25,11 +25,11 @@ from hft2ane.models.distilbert import (
 TEST_MAX_SEQ_LEN = 256
 PSNR_THRESHOLD = 60
 
-SEQUENCE_CLASSIFICATION_MODEL = 'distilbert-base-uncased-finetuned-sst-2-english'
-MASKED_LM_MODEL = 'distilbert-base-uncased'
-QUESTION_ANSWERING_MODEL = 'distilbert-base-uncased-distilled-squad'
-TOKEN_CLASSIFICATION_MODEL = 'elastic/distilbert-base-uncased-finetuned-conll03-english'
-MULTIPLE_CHOICE_MODEL = 'Gladiator/distilbert-base-uncased_swag_mqa'
+SEQUENCE_CLASSIFICATION_MODEL = "distilbert-base-uncased-finetuned-sst-2-english"
+MASKED_LM_MODEL = "distilbert-base-uncased"
+QUESTION_ANSWERING_MODEL = "distilbert-base-uncased-distilled-squad"
+TOKEN_CLASSIFICATION_MODEL = "elastic/distilbert-base-uncased-finetuned-conll03-english"
+MULTIPLE_CHOICE_MODEL = "Gladiator/distilbert-base-uncased_swag_mqa"
 
 
 @pytest.fixture(scope="session")
@@ -48,9 +48,11 @@ def sequence_classification():
 def masked_lm():
     tokenizer = AutoTokenizer.from_pretrained(MASKED_LM_MODEL)
     hf_model = HF_DistilBertForMaskedLM.from_pretrained(
-        MASKED_LM_MODEL, return_dict=False).eval()
+        MASKED_LM_MODEL, return_dict=False
+    ).eval()
     ane_model = DistilBertForMaskedLM.from_pretrained(
-        MASKED_LM_MODEL, return_dict=False).eval()
+        MASKED_LM_MODEL, return_dict=False
+    ).eval()
     return tokenizer, hf_model, ane_model
 
 
@@ -58,9 +60,11 @@ def masked_lm():
 def question_answering():
     tokenizer = AutoTokenizer.from_pretrained(QUESTION_ANSWERING_MODEL)
     hf_model = HF_DistilBertForQuestionAnswering.from_pretrained(
-        QUESTION_ANSWERING_MODEL, return_dict=False).eval()
+        QUESTION_ANSWERING_MODEL, return_dict=False
+    ).eval()
     ane_model = DistilBertForQuestionAnswering.from_pretrained(
-        QUESTION_ANSWERING_MODEL, return_dict=False).eval()
+        QUESTION_ANSWERING_MODEL, return_dict=False
+    ).eval()
     return tokenizer, hf_model, ane_model
 
 
@@ -68,9 +72,11 @@ def question_answering():
 def token_classification():
     tokenizer = AutoTokenizer.from_pretrained(TOKEN_CLASSIFICATION_MODEL)
     hf_model = HF_DistilBertForTokenClassification.from_pretrained(
-        TOKEN_CLASSIFICATION_MODEL, return_dict=False).eval()
+        TOKEN_CLASSIFICATION_MODEL, return_dict=False
+    ).eval()
     ane_model = DistilBertForTokenClassification.from_pretrained(
-        TOKEN_CLASSIFICATION_MODEL, return_dict=False).eval()
+        TOKEN_CLASSIFICATION_MODEL, return_dict=False
+    ).eval()
     return tokenizer, hf_model, ane_model
 
 
@@ -78,9 +84,11 @@ def token_classification():
 def multiple_choice():
     tokenizer = AutoTokenizer.from_pretrained(MULTIPLE_CHOICE_MODEL)
     hf_model = HF_DistilBertForMultipleChoice.from_pretrained(
-        MULTIPLE_CHOICE_MODEL, return_dict=False).eval()
+        MULTIPLE_CHOICE_MODEL, return_dict=False
+    ).eval()
     ane_model = DistilBertForMultipleChoice.from_pretrained(
-        MULTIPLE_CHOICE_MODEL, return_dict=False).eval()
+        MULTIPLE_CHOICE_MODEL, return_dict=False
+    ).eval()
     return tokenizer, hf_model, ane_model
 
 
@@ -88,23 +96,39 @@ def _np_probs(logits: torch.Tensor) -> np.ndarray:
     return logits.softmax(1).numpy()
 
 
-def _get_class_index(output_logits: torch.Tensor, id2label: dict[int, str | int]) -> str | int:
+def _get_class_index(
+    output_logits: torch.Tensor, id2label: dict[int, str | int]
+) -> str | int:
     return id2label[torch.argmax(output_logits, dim=1).item()]
 
 
-def _decode_masked(output_logits: torch.Tensor, tokenizer: PreTrainedTokenizer, masked_index: int) -> str:
+def _decode_masked(
+    output_logits: torch.Tensor, tokenizer: PreTrainedTokenizer, masked_index: int
+) -> str:
     predicted_index = torch.argmax(output_logits[0], dim=1)[masked_index].item()
     return tokenizer.convert_ids_to_tokens([predicted_index])[0]
 
 
-def _decode_qa(inputs, start_logits: torch.Tensor, end_logits: torch.Tensor, tokenizer: PreTrainedTokenizer) -> str:
+def _decode_qa(
+    inputs,
+    start_logits: torch.Tensor,
+    end_logits: torch.Tensor,
+    tokenizer: PreTrainedTokenizer,
+) -> str:
     answer_start_index = torch.argmax(start_logits)
     answer_end_index = torch.argmax(end_logits)
-    predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
+    predict_answer_tokens = inputs.input_ids[
+        0, answer_start_index : answer_end_index + 1
+    ]
     return tokenizer.decode(predict_answer_tokens)
 
 
-def _get_labelled_tokens(output_logits: torch.Tensor, input_str: str, id2label: dict[int, str | int], tokenizer: PreTrainedTokenizer) -> list[tuple[str, str]]:
+def _get_labelled_tokens(
+    output_logits: torch.Tensor,
+    input_str: str,
+    id2label: dict[int, str | int],
+    tokenizer: PreTrainedTokenizer,
+) -> list[tuple[str, str]]:
     # NOTE: The first and last tokens of `predicted_labels` are [CLS] and [SEP] respectively
     predicted_labels = torch.argmax(output_logits, dim=2)
     labels = [id2label[label_id] for label_id in predicted_labels[0].tolist()]
@@ -121,7 +145,7 @@ def _get_choice(output_logits: torch.Tensor, choices: list[str]) -> str:
     [
         ("Today was a good day!", "POSITIVE"),
         ("This is not what I expected!", "NEGATIVE"),
-    ]
+    ],
 )
 def test_sequence_classification(input_str, expected_output, sequence_classification):
     tokenizer, hf_model, ane_model = sequence_classification
@@ -156,12 +180,12 @@ def test_sequence_classification(input_str, expected_output, sequence_classifica
     [
         ("Hello how [MASK] you doing?", "are"),
         ("Hello how are [MASK] doing?", "you"),
-    ]
+    ],
 )
 def test_masked_lm(input_str, expected_output, masked_lm):
     tokenizer, hf_model, ane_model = masked_lm
     tokenized_text = tokenizer.tokenize(input_str)
-    masked_index = tokenized_text.index('[MASK]')
+    masked_index = tokenized_text.index("[MASK]")
     indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
     tokens_tensor = torch.tensor([indexed_tokens])
 
@@ -179,7 +203,7 @@ def test_masked_lm(input_str, expected_output, masked_lm):
     hf_result = _decode_masked(hf_outputs[0], tokenizer, masked_index)
     ane_result = _decode_masked(ane_outputs[0], tokenizer, masked_index)
     assert ane_result == hf_result
-    
+
     assert ane_result == expected_output
 
 
@@ -201,7 +225,7 @@ QA_CONTEXT = """The Amazon rainforest (Portuguese: Floresta Amazônica or Amazô
             "Which name is also used to describe the Amazon rainforest in English?",
             "amazonia",
         ),
-    ]
+    ],
 )
 def test_question_answering(question, expected_output, question_answering):
     tokenizer, hf_model, ane_model = question_answering
@@ -218,7 +242,7 @@ def test_question_answering(question, expected_output, question_answering):
     hf_result = _decode_qa(inputs, hf_outputs[0], hf_outputs[1], tokenizer)
     ane_result = _decode_qa(inputs, ane_outputs[0], ane_outputs[1], tokenizer)
     assert ane_result == hf_result
-    
+
     assert ane_result == expected_output
 
 
@@ -227,32 +251,36 @@ def test_question_answering(question, expected_output, question_answering):
     [
         (
             "My name is Sarah and I live in London",
-            [('my', 'O'),
-            ('name', 'O'),
-            ('is', 'O'),
-            ('sarah', 'B-PER'),
-            ('and', 'O'),
-            ('i', 'O'),
-            ('live', 'O'),
-            ('in', 'O'),
-            ('london', 'B-LOC')]
+            [
+                ("my", "O"),
+                ("name", "O"),
+                ("is", "O"),
+                ("sarah", "B-PER"),
+                ("and", "O"),
+                ("i", "O"),
+                ("live", "O"),
+                ("in", "O"),
+                ("london", "B-LOC"),
+            ],
         ),
         (
             "My name is Clara and I live in Berkeley, California.",
-            [('my', 'O'),
-            ('name', 'O'),
-            ('is', 'O'),
-            ('clara', 'B-PER'),
-            ('and', 'O'),
-            ('i', 'O'),
-            ('live', 'O'),
-            ('in', 'O'),
-            ('berkeley', 'B-LOC'),
-            (',', 'O'),
-            ('california', 'B-LOC'),
-            ('.', 'O')]
+            [
+                ("my", "O"),
+                ("name", "O"),
+                ("is", "O"),
+                ("clara", "B-PER"),
+                ("and", "O"),
+                ("i", "O"),
+                ("live", "O"),
+                ("in", "O"),
+                ("berkeley", "B-LOC"),
+                (",", "O"),
+                ("california", "B-LOC"),
+                (".", "O"),
+            ],
         ),
-    ]
+    ],
 )
 def test_token_classification(input_str, expected_output, token_classification):
     tokenizer, hf_model, ane_model = token_classification
@@ -271,8 +299,12 @@ def test_token_classification(input_str, expected_output, token_classification):
     )
     assert peak_signal_to_noise_ratio > PSNR_THRESHOLD
 
-    hf_result = _get_labelled_tokens(hf_outputs[0], input_str, hf_model.config.id2label, tokenizer)
-    ane_result = _get_labelled_tokens(ane_outputs[0], input_str, ane_model.config.id2label, tokenizer)
+    hf_result = _get_labelled_tokens(
+        hf_outputs[0], input_str, hf_model.config.id2label, tokenizer
+    )
+    ane_result = _get_labelled_tokens(
+        ane_outputs[0], input_str, ane_model.config.id2label, tokenizer
+    )
     assert ane_result == hf_result
 
     assert ane_result == expected_output
@@ -284,7 +316,7 @@ def test_token_classification(input_str, expected_output, token_classification):
         (
             "What is the capital of France?",
             ["Paris", "London", "Berlin", "Madrid"],
-            "Paris"
+            "Paris",
         ),
         (
             "France has a bread law, Le Décret Pain, with strict rules on what is allowed in a traditional baguette.",
@@ -292,9 +324,9 @@ def test_token_classification(input_str, expected_output, token_classification):
                 "The law does not apply to croissants and brioche.",
                 "The law applies to baguettes.",
             ],
-            "The law applies to baguettes."
-        )
-    ]
+            "The law applies to baguettes.",
+        ),
+    ],
 )
 def test_multiple_choice(input_str, choices, expected_output, multiple_choice):
     tokenizer, hf_model, ane_model = multiple_choice

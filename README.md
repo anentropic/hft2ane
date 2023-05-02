@@ -18,6 +18,10 @@ There are two parts:
 - Re-implementations of [various parent models](#supported-model-types), using the code from Apple `ane_transformers` library (they provide the initial conversion for `distilbert` only).
 - Tool to simplify loading pre-trained weights from HuggingFace into the appropriate re-implemented model, then exporting it to Apple's CoreML `.mlpackage` format. This can be run from Python via `coremltools` or incorporated into an XCode project for Swift, iOS etc, and CoreML will run it on the Neural Engine.
 
+### Alternatives
+
+- https://mlc.ai/mlc-llm/ compiles any LLM from HF, for any platform (e.g. Metal backend on Mac/iPhone). Outputs an example cli chat app. Relies on TVM for compilation so no ANE backend, though GPU can be faster.
+- https://github.com/huggingface/exporters (no `pip` install yet) and https://huggingface.co/spaces/huggingface-projects/transformers-to-coreml Gradio app. Nice front-end for converting HF models to CoreML. Allows setting the 'compute unit' flag, but presumably large Transformer models will not execute on the ANE since HF Hub models don't have the necessary tweaks per the Apple doc above.
 
 ## Get started
 
@@ -38,7 +42,7 @@ Currently `hft2ane` supports:
 - `ane_transformers` is currently pinned to PyTorch `<=1.11.0`. This means we can't load and convert any models which use PyTorch 2+ features. See https://github.com/apple/ml-ane-transformers/pull/3
   - due to bugs in their DistilBERT, and factoring out some common stuff after implementing BERT, there is very little we're importing from that lib (just the `LayerNormANE` class and the `compute_psnr` test util)... we could easily just vendor those in and drop the dependency
   - there's a few places where PyTorch 2's new `squeeze` with tuple of dims would allow us to remove a double squeeze
-- Can we make use of this https://github.com/huggingface/exporters
+- Can we make use of this https://github.com/huggingface/exporters ?
 
 ### NOTE re asitop logs
 

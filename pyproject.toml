@@ -19,12 +19,13 @@ art = "^5.9"
 numpy = "^1.24.3"
 
 [tool.poetry.group.dev.dependencies]
-ipython = "^8.12.0"
-pdbpp = "^0.10.3"
+ipython = "*"
+pdbpp = "*"
 mypy = "^1.2.0"
-ruff = "^0.0.262"
-black = "^23.3.0"
+ruff = "*"
+black = "*"
 pytest = "^7.3.1"
+pre-commit = "^3.3.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -42,3 +43,8 @@ module = [
     "transformers.*",
 ]
 ignore_missing_imports = true
+
+[tool.ruff]
+ignore = [
+    "E501",
+]
