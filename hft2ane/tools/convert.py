@@ -1,4 +1,4 @@
-from typing import Type
+from typing import Any, Type
 from warnings import warn
 
 import torch
@@ -99,7 +99,7 @@ def _get_ct_outputs(model: PreTrainedModel) -> list[ct.TensorType]:
     ]
 
 
-def _get_classifier_config(id2label: dict[str, int | str]) -> ct.ClassifierConfig:
+def _get_classifier_config(id2label: dict[int, int | str]) -> ct.ClassifierConfig:
     """
     TODO: we can't use this because coremltools complains about the shape of outputs
     from unaltered HF models. HF `exporters` gets around this by adding a Wrapper
@@ -170,7 +170,7 @@ def to_coreml_internal(
         list(baseline_model.dummy_inputs.values()),
     )
 
-    kwargs = {}
+    kwargs: dict[str, Any] = {}
     # if is_classifier and (class_labels := getattr(baseline_model.config, "id2label", None)):
     #     kwargs["classifier_config"] = _get_classifier_config(class_labels)
     mlmodel = ct.convert(

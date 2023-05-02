@@ -1,9 +1,10 @@
 import warnings
 from contextlib import contextmanager
 from types import NoneType
-from typing import Any, get_type_hints, get_args, Type
+from typing import Any, Iterator, get_type_hints, get_args, Type, TypeGuard
 
 import torch.nn
+from transformers import PreTrainedModel
 from transformers.utils.fx import symbolic_trace
 from transformers.modeling_outputs import ModelOutput
 
@@ -25,7 +26,7 @@ TensorT = (
 
 
 @contextmanager
-def model_config(model: torch.nn.Module, **kwargs):
+def model_config(model: PreTrainedModel, **kwargs):
     """
     Temporarily set the config of a model.
     """
@@ -35,7 +36,7 @@ def model_config(model: torch.nn.Module, **kwargs):
     model.config = old_config
 
 
-def _get_by_trace(model: torch.nn.Module) -> tuple[list[str], list[str]]:
+def _get_by_trace(model: PreTrainedModel) -> tuple[list[str], list[str]]:
     """
     Get the output of a model by tracing it with a dummy input.
     This is useful for getting the output shape of a model, which is
@@ -65,7 +66,7 @@ class MultipleModelOutputsFound(Exception):
     pass
 
 
-def _flatten_type_args(type_args: tuple[object, ...]) -> list[object]:
+def _flatten_type_args(type_args: tuple[object, ...]) -> Iterator[object]:
     for t in type_args:
         if t_args := get_args(t):
             yield from _flatten_type_args(t_args)
@@ -86,14 +87,14 @@ def _fields_from_model_output(
     return required_fields, optional_fields
 
 
-def _is_model_output(t: Any) -> bool:
+def _is_model_output(t: Any) -> TypeGuard[ModelOutput]:
     try:
         return issubclass(t, ModelOutput)
     except TypeError:
         return False
 
 
-def _get_by_model_outputs(model: torch.nn.Module) -> tuple[list[str], list[str]]:
+def _get_by_model_outputs(model: PreTrainedModel) -> tuple[list[str], list[str]]:
     """
     Get the output of a model by inspecting the annotations of the forward method.
     This is useful for getting the output shape of a model, which is not available
@@ -130,7 +131,7 @@ def _get_by_model_outputs(model: torch.nn.Module) -> tuple[list[str], list[str]]
 
 
 def get_input_and_output_key_names(
-    model: torch.nn.Module,
+    model: PreTrainedModel,
 ) -> tuple[list[str], list[str]]:
     """
     See coremltools.converters._converters_entry.convert and _validate_outputs_argument

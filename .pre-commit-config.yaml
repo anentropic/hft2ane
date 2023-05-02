@@ -7,4 +7,14 @@ repos:
 - repo: https://github.com/psf/black
   rev: "23.3.0"
   hooks:
-  -   id: black
+    - id: black
+- repo: local
+  hooks:
+    - id: mypy
+      name: mypy
+      entry: mypy
+      args: ["-p", "hft2ane"]
+      pass_filenames: false
+      language: system
+      types: [python]
+      require_serial: true

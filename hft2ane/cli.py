@@ -214,7 +214,7 @@ def get_checks(
                 confirm_ane = confirm(
                     "Attempt to confirm if the model actually executes on the Neural Engine?",
                 )
-    return fail_on_sanity_check, confirm_ane
+    return bool(fail_on_sanity_check), bool(confirm_ane)
 
 
 def convert(args: argparse.Namespace):
