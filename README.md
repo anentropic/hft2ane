@@ -34,8 +34,22 @@ The process of translating models from HF `transformers` into ANE-friendly form 
 Currently `hft2ane` supports:
 
 - **DistilBERT**
-- **BERT** (TODO: cross-attention, i.e. EncoderDecoderModel support)
+- **BERT** (TODO: EncoderDecoderModel support, needs translatedcross-attention implementation)
 - **RoBERTa** (TODO: CausalLM and EncoderDecoderModel support)
+
+TODO: export of `*ForMultipleChoice` models is currently failing in all cases, an issue at JIT tracing step.
+
+### Results
+
+Apple report "up to" 10x speedup for their ANE-optimised DistilBERT, in the form of these hard-to-read graphs https://machinelearning.apple.com/research/neural-engine-transformers#figure2 - we can see that actual speedup is somewhat dependent on batch size and sequence length (more speedup with longer sequences).
+
+We do a basic sanity check after export from `hft2ane` using a batch of 1 and very short sequence. Our version of DistilBERT is the same as Apple's one above and reports a **3.67x** speedup for this check on my 2020 M1 Macbook Air. This is comparing the compiled CoreML models with or without the ANE compute unit flag enabled. We can use that as a baseline.
+
+I converted `dslim/bert-base-NER-uncased` as `BertForTokenClassification.mlpackage` and measured a **3.26x** speedup.
+
+I converted `deepset/roberta-base-squad2` as `RobertaForQuestionAnswering.mkpackage` and measured **3.53x** speedup.
+
+So... these translations look basically successful!
 
 ## TODO
 

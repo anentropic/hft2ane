@@ -237,7 +237,7 @@ def test_question_answering(question, expected_output, question_answering):
 
     assert ane_outputs[0].shape == hf_outputs[0].shape
 
-    # TODO: not sure how to do the PSNR test for this one
+    # TODO: not sure how to do the PSNR test for this one (i.e. it fails)
 
     hf_result = _decode_qa(inputs, hf_outputs[0], hf_outputs[1], tokenizer)
     ane_result = _decode_qa(inputs, ane_outputs[0], ane_outputs[1], tokenizer)

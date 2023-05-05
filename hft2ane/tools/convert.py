@@ -1,3 +1,4 @@
+import os
 from typing import Any, Type
 from warnings import warn
 
@@ -190,10 +191,10 @@ def to_coreml_internal(
     ct.models.MLModel(
         mlmodel._spec,
         weights_dir=mlmodel._weights_dir,
-        is_temp_package=True,
         skip_model_load=True,
     ).save(out_path)
 
+    mlmodel.package_path = os.path.abspath(out_path)
     return mlmodel
 
 

@@ -124,11 +124,15 @@ def get_hft2ane_model(model: Type[PreTrainedModel]) -> Type[PreTrainedModel]:
     raise ModelNotFoundError(f"Could not find hft2ane model matching: {model.__name__}")
 
 
-_CONCRETE_TO_AUTO = {
-    concrete_model: auto_model
-    for auto_model in _AUTO_MODELS
-    for concrete_model in auto_model._model_mapping.values()
-}
+def _concrete_to_auto():
+    mapping = {}
+    for auto_model in _AUTO_MODELS:
+        for concrete_model in auto_model._model_mapping.values():
+            mapping.setdefault(concrete_model, []).append(auto_model)
+    return mapping
+
+
+_CONCRETE_TO_AUTO = _concrete_to_auto()
 
 
 def get_hf_auto_model(
@@ -151,11 +155,23 @@ def get_hf_auto_model(
     else:
         # models using vanilla HF transformers classes
         try:
-            return _CONCRETE_TO_AUTO[model]
+            candidates = _CONCRETE_TO_AUTO[model]
         except KeyError:
             raise ModelNotFoundError(
                 f"Could not find HF AutoModel matching: {model.__name__}"
             )
+        if not candidates:
+            raise ModelNotFoundError(
+                f"Could not find HF AutoModel matching: {model.__name__}"
+            )
+        prefix_len = len("AutoModel")
+        best_matches = filter(
+            lambda cls: model.__name__.endswith(cls.__name__[prefix_len:]), candidates
+        )
+        try:
+            return next(best_matches)
+        except StopIteration:
+            return candidates[0]
 
 
 _AUTO_MODEL_TO_OUTPUT = {

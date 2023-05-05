@@ -145,8 +145,8 @@ class BertSelfAttention(modeling_bert.BertSelfAttention):
                 attention_mask = attention_mask.unsqueeze(2).unsqueeze(2)
 
             # hft2ane: updated to match observed shape
-            expected_mask_shape = [bs, 1, 1, seqlen]
-            if list(attention_mask.size()) != expected_mask_shape:
+            expected_mask_shape = torch.Size([bs, 1, 1, seqlen])
+            if attention_mask.size() != expected_mask_shape:
                 raise RuntimeError(
                     f"Invalid shape for `mask` (Expected {expected_mask_shape}, got {list(attention_mask.size())}"
                 )

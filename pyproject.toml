@@ -14,7 +14,7 @@ ane-transformers = "^0.1.3"
 torch = "*"
 torchinfo = "*"
 asitop = "^0.0.23"
-beaupy = "^3.5.3"
+beaupy = "^3.5.4"
 art = "^5.9"
 numpy = "^1.24.3"
 
