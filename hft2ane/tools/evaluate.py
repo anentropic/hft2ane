@@ -86,8 +86,8 @@ def _values_agree(baseline: np.ndarray, coreml: np.ndarray, rtol: float) -> bool
 class Disagreement:
     values_match: bool
     peak_snr_passed: bool
-    min_snr: float
-    measured_peak_snr: float
+    min_snr: float  # dB
+    measured_peak_snr: float  # dB
     baseline_vals: np.ndarray
     coreml_vals: np.ndarray
 
@@ -105,12 +105,15 @@ def sanity_check(
         Tuple of (bool, dict):
             bool: True if the baseline and converted models agree on the outputs
             dict: Outputs where the baseline and converted models disagree
-                  (by more than ∓0.01)
+                  (by rtol ∓0.1) or the peak SNR is less than `min_snr`.
 
-    TODO:
+    NOTE:
     ane_transformers.testing_utils.compute_psnr is how Apple were evaluating
-    their conversion (and for classification task, does argmax point to same
-    input id?)
+    their conversion (and for classification tasks, does argmax point to same
+    input id?) ...they use 60dB as min level, which is quite high, perhaps
+    just tuned to the result they got naturally?
+    https://resources.pcb.cadence.com/blog/2020-what-is-signal-to-noise-ratio-and-how-to-calculate-it
+    suggests 25-40dB is 'good' (for WiFi) and > 40dB is 'excellent'.
     """
     with torch.no_grad():
         baseline_outputs = baseline(**baseline.dummy_inputs)
@@ -134,6 +137,7 @@ def sanity_check(
 
         values_match = _values_agree(np_baseline_vals, coreml_vals, rtol)
 
+        # `compute_psnr` returns decibels (dB)
         peak_signal_to_noise_ratio: float = compute_psnr(
             baseline_vals.softmax(1).numpy(),
             torch.from_numpy(coreml_vals).softmax(1).numpy(),

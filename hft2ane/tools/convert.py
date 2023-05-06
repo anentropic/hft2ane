@@ -81,6 +81,14 @@ def _get_ct_inputs(model: PreTrainedModel) -> list[ct.TensorType]:
     return [
         ct.TensorType(
             name,
+            shape=torch.Size([1, 4, 11]),
+            dtype=np.int32,
+        )
+        for name in ("input_ids", "token_type_ids", "attention_mask")
+    ]
+    return [
+        ct.TensorType(
+            name,
             shape=tensor.shape,
             dtype=_pt_to_np_dtype(tensor.dtype),
         )
@@ -127,7 +135,10 @@ def _set_metadata(
     mlmodel: ct.models.MLModel, model_name: str, model_cls_name: str | None
 ) -> None:
     hfinfo = model_info(model_name)
-    mlmodel.license = hfinfo.cardData["license"]
+    try:
+        mlmodel.license = hfinfo.cardData["license"]
+    except (AttributeError, KeyError):
+        pass
     mlmodel.author = hfinfo.author or "<via Hugging Face>"
     mlmodel.version = hfinfo.sha
     mlmodel.short_description = (
@@ -166,9 +177,15 @@ def to_coreml_internal(
             "Neural Engine's ~3GB memory constraints and will execute on CPU. "
             "Run the --confirm-neural-engine evaluation to confirm."
         )
+
     traced_optimized_model = torch.jit.trace(
         hft2ane_model,
-        list(baseline_model.dummy_inputs.values()),
+        # list(baseline_model.dummy_inputs.values()),
+        [
+            torch.randint(0, 30522, [1, 4, 11]),
+            torch.randint(0, 2, [1, 4, 11]),
+            torch.randint(0, 2, [1, 4, 11]),
+        ],
     )
 
     kwargs: dict[str, Any] = {}
