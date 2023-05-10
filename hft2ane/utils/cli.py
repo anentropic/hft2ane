@@ -89,3 +89,11 @@ class Cli:
             parser.set_defaults(func=func)
 
         return decorator
+
+
+def is_format_string(s):
+    try:
+        s.format()
+    except (ValueError, KeyError, IndexError):
+        return True
+    return False

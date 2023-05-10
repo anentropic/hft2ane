@@ -37,7 +37,13 @@ Currently `hft2ane` supports:
 - **BERT** (TODO: EncoderDecoderModel support, needs translatedcross-attention implementation)
 - **RoBERTa** (TODO: CausalLM and EncoderDecoderModel support)
 
-TODO: export of `*ForMultipleChoice` models is currently failing in all cases, an issue at JIT tracing step.
+TODO: export of `*ForMultipleChoice` models is currently failing in all cases, an issue at JIT tracing step (turns out `model.dummy_inputs` is insufficient for this use case).
+
+EncoderDecoderModels are also a problem for HF `exporters` project - they [resort](https://github.com/huggingface/exporters/blob/main/src/exporters/coreml/__main__.py#L54) to exporting separate 'encoder' and 'decoder' .mlpackage files, which I guess you can then glue together yourself with a [CoreML pipeline](https://apple.github.io/coremltools/source/coremltools.models.html#module-coremltools.models.pipeline).
+
+#### NOTE
+
+Only PyTorch models are supported.
 
 ### Results
 
@@ -53,10 +59,8 @@ So... these translations look basically successful!
 
 ## TODO
 
-- `ane_transformers` is currently pinned to PyTorch `<=1.11.0`. This means we can't load and convert any models which use PyTorch 2+ features. See https://github.com/apple/ml-ane-transformers/pull/3
-  - due to bugs in their DistilBERT, and factoring out some common stuff after implementing BERT, there is very little we're importing from that lib (just the `LayerNormANE` class and the `compute_psnr` test util)... we could easily just vendor those in and drop the dependency
-  - there's a few places where PyTorch 2's new `squeeze` with tuple of dims would allow us to remove a double squeeze
-- Can we make use of this https://github.com/huggingface/exporters ?
+- The sequence length gets baked into the exported model. HF exporters provides for variable sequence lengths, but we run into this issue https://github.com/apple/coremltools/issues/1763
+  - needs to be exposed as a cli param
 
 ### NOTE re asitop logs
 

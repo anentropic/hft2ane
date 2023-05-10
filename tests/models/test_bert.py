@@ -529,6 +529,7 @@ def test_export(model_name, hf_model_cls, get_inputs, example, tmp_path_factory)
     # however actual model usage requires more, e.g. `get_inputs` for sequence classification
     # returns a mapping with: `input_ids`, `token_type_ids`, `attention_mask`
     # (this is also what prevents MultipleChoice from converting currently)
+    # TODO: see `tokenizer.model_input_names` for the names of the inputs
     np_inputs = {k: v.numpy().astype(np.int32) for k, v in inputs.items()}
     with torch.no_grad():
         baseline_outputs = (

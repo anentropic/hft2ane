@@ -1,0 +1,6 @@
+[submodule "exporters"]
+	path = vendor/exporters
+	url = https://github.com/anentropic/exporters.git
+[submodule "ml-ane-transformers"]
+	path = vendor/ml-ane-transformers
+	url = https://github.com/apple/ml-ane-transformers.git

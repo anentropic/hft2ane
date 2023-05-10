@@ -149,6 +149,7 @@ def _get_choice(output_logits: torch.Tensor, choices: list[str]) -> str:
 )
 def test_sequence_classification(input_str, expected_output, sequence_classification):
     tokenizer, hf_model, ane_model = sequence_classification
+    # 'input_ids', 'attention_mask'
     inputs = tokenizer(
         [input_str],
         return_tensors="pt",

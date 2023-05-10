@@ -2,6 +2,7 @@ import argparse
 import importlib
 import os
 import warnings
+from contextlib import contextmanager
 from typing import Collection
 
 import coremltools as ct
@@ -9,27 +10,32 @@ import transformers
 from art import text2art
 from beaupy import confirm, prompt, select, select_multiple, Config, Abort
 from coremltools import ComputeUnit
+from exporters.coreml.config import CoreMLConfig
+from exporters.coreml.validate import validate_model_outputs
 from huggingface_hub import model_info
 from huggingface_hub.utils import RepositoryNotFoundError
 from rich import print
+from rich_argparse import RichHelpFormatter
 from transformers.modeling_utils import PreTrainedModel
+from transformers.utils.generic import TensorType
 
 from hft2ane.exceptions import ModelNotFoundError
-from hft2ane.mappings import get_hft2ane_model_names, is_classifier
-from hft2ane.tools.convert import (
+from hft2ane.mappings import get_hft2ane_model_names, get_task
+from hft2ane.convert.convert import (
+    PreprocessorT,
     get_baseline_model,
     get_models_for_conversion,
-    to_coreml_internal,
+    hf_to_coreml,
     METADATA_MODEL_NAME_KEY,
     METADATA_MODEL_CLS_KEY,
 )
-from hft2ane.tools.evaluate import (
+from hft2ane.evaluate.evaluate import (
     sanity_check,
     confirm_ane_via_powermetrics,
     get_dummy_inputs,
     measure_ane_speedup_from_converted,
 )
-from hft2ane.utils.cli import argument, spinner
+from hft2ane.utils.cli import argument, is_format_string, spinner
 
 
 COMPUTE_UNIT_CHOICES = tuple(cu.name for cu in ComputeUnit)
@@ -44,6 +50,11 @@ class SanityCheckError(Exception):
 # beaupy config:
 Config.raise_on_interrupt = True
 Config.raise_on_escape = True
+
+
+@contextmanager
+def noop(*args, **kwargs):
+    yield
 
 
 def _validate_model_name(model_name: str) -> bool:
@@ -141,8 +152,9 @@ def get_out_paths(
     model_cls_names: Collection[str],
 ) -> list[str]:
     if not out_paths:
-        out_dir = prompt("Output directory: ", initial_value=out_dir)
-        out_dir = out_dir.strip()
+        if not out_dir:
+            out_dir = prompt("Output directory: ", initial_value=out_dir)
+            out_dir = out_dir.strip()
         os.makedirs(out_dir, exist_ok=True)
 
         if not pkg_names:
@@ -228,30 +240,35 @@ def convert(args: argparse.Namespace):
     for i, (model_spec, out_path) in enumerate(zip(model_map.items(), out_paths)):
         (model_cls_name, (base_model, hft2ane_model)) = model_spec
         if os.path.exists(out_path):
+            # TODO: confirm overwrite?
             print(
                 f"> ⚠️  Skipping '{model_name}' as {model_cls_name} as output path already "
                 f"exists: {out_path}",
             )
             continue
-        with spinner(
+    
+        task = get_task(base_model.__class__)
+
+        with noop(
             f"({i+1}) Converting '{model_name}' as {model_cls_name}\n"
             "  to CoreML .mlpackage format...\n",
         ):
-            converted = to_coreml_internal(
-                baseline_model=base_model,
+            converted, preprocessor, config = hf_to_coreml(
                 hft2ane_model=hft2ane_model,
+                task=task,
+                preprocessor_name="tokenizer",  # TODO
+                sequence_length=args.seq_len,
                 out_path=out_path,
-                compute_units=ct.ComputeUnit.ALL,
-                model_cls_name=model_cls_name,
-                is_classifier=is_classifier(base_model.__class__),
             )
         print(f"> 💾 Saved converted model to: {out_path}")
 
         _verify(
-            base_model,
-            converted,
-            fail_on_sanity_check,
-            confirm_ane,
+            base_model=base_model,
+            converted=converted,
+            preprocessor=preprocessor,
+            config=config,
+            fail_on_sanity_check=fail_on_sanity_check,
+            confirm_ane=confirm_ane,
         )
 
     print("> 🎉 All done!")
@@ -329,6 +346,8 @@ def verify(args: argparse.Namespace):
 def _verify(
     base_model: PreTrainedModel,
     converted: ct.models.MLModel,
+    preprocessor: PreprocessorT,
+    config: CoreMLConfig,
     fail_on_sanity_check: bool,
     confirm_ane: bool,
     rtol: float = 0.1,
@@ -337,26 +356,50 @@ def _verify(
 ):
     pkg_path = os.path.relpath(converted.package_path)
 
-    sane, results = sanity_check(base_model, converted, rtol, min_snr)
-    if sane:
-        print(
-            f"> ✅ Sanity check passed for '{pkg_path}'.\n"
-            f"  📊 (Returned output logits were all within rtol={rtol})"
-            f"  📊 (Peak signal-to-noise ratio for all outputs > {min_snr})"
+    try:
+        breakpoint()
+        validate_model_outputs(
+            config=config,
+            preprocessor=preprocessor,
+            reference_model=base_model,
+            mlmodel=converted,
+            atol=config.atol_for_validation,
         )
-    else:
+    except ValueError as e:
         if fail_on_sanity_check:
             raise SanityCheckError(
-                f"Sanity check failed for '{pkg_path}'.\n" f"Results: {results}"
+                f"Sanity check failed for '{pkg_path}'.\n" f"Error: {e!r}"
             )
         else:
             print(
-                f"> 🛑 Sanity check failed for '{pkg_path}'.\n" f"  📊 Results: {results}"
+                f"> 🛑 Sanity check failed for '{pkg_path}'.\n"
+                f"  📊 Error: {e!r}"
             )
+    else:
+        # `validate_model_outputs` does its own logging
+        pass
+
+    # sane, results = sanity_check(base_model, converted, rtol, min_snr)
+    # if sane:
+    #     print(
+    #         f"> ✅ Sanity check passed for '{pkg_path}'.\n"
+    #         f"  📊 (Returned output logits were all within rtol={rtol})"
+    #         f"  📊 (Peak signal-to-noise ratio for all outputs > {min_snr})"
+    #     )
+    # else:
+    #     if fail_on_sanity_check:
+    #         raise SanityCheckError(
+    #             f"Sanity check failed for '{pkg_path}'.\n" f"Results: {results}"
+    #         )
+    #     else:
+    #         print(
+    #             f"> 🛑 Sanity check failed for '{pkg_path}'.\n" f"  📊 Results: {results}"
+    #         )
 
     with spinner("Measuring inference speedup vs ANE compute-unit disabled..."):
-        dummy_inputs = get_dummy_inputs(base_model)
-        speedup = measure_ane_speedup_from_converted(converted, dummy_inputs)
+        dummy_inputs = config.generate_dummy_inputs(preprocessor=preprocessor, framework=TensorType.PYTORCH)
+        coreml_inputs = {key: val[1] for key, val in dummy_inputs.items()}
+        speedup = measure_ane_speedup_from_converted(converted, coreml_inputs)
     if speedup < speedup_threshold:
         print(
             f"> 🛑 Did not measure expected ANE speedup for '{pkg_path}'.\n"
@@ -382,7 +425,7 @@ def _verify(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(formatter_class=RichHelpFormatter)
     subparsers = parser.add_subparsers(title="commands", dest="subcommand")
 
     arg_model_name = argument(
@@ -414,14 +457,21 @@ if __name__ == "__main__":
     convert_parser = subparsers.add_parser(
         "convert",
         help="Convert a pre-trained model from HuggingFace Transformers to ANE-optimised CoreML .mlpackage format.",
+        formatter_class=RichHelpFormatter,
     )
     convert_parser.add_argument(*arg_model_name[0], **arg_model_name[1])
     convert_parser.add_argument(*arg_model_cls[0], **arg_model_cls[1])
     convert_parser.add_argument(
+        # TODO: only relevant to text models
+        "--seq-len",
+        type=int,
+        help="Sequence length for the exported model (default: 128)",  # due to HF exporters
+    )
+    convert_parser.add_argument(
         "--out-dir",
         type=str,
         help="Path to save the converted model(s) to",
-        default="./",
+        default="",
     )
     output_group = convert_parser.add_mutually_exclusive_group()
     output_group.add_argument(
@@ -448,6 +498,7 @@ if __name__ == "__main__":
     verify_parser = subparsers.add_parser(
         "verify",
         help="Verify an already converted model matches output of original model. Optionally confirm if the model actually executes on the Neural Engine.",
+        formatter_class=RichHelpFormatter,
     )
     verify_parser.add_argument(
         "pkg_path",

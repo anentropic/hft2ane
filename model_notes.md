@@ -9,11 +9,13 @@ Ones that look interesting to me...
 - **DistilBERT:** reduced params by training under the guidance of a BERT tutor
 - **RoBERTa:** minor tweaks and an improved training regime, fine-tuned large RoBERTas are SOTA on many benchmarks.
 - **ALBERT:** reduced params and model tweaks. ALBERT-xxl (235M) beats BERT-large (335M) and RoBERTa-base.
-- **DeBERTa** https://huggingface.co/microsoft/deberta-v3-base "improves the BERT and RoBERTa models using disentangled attention and enhanced mask decoder. With those two improvements, DeBERTa out perform RoBERTa on a majority of NLU tasks" and "using ELECTRA-Style pre-training ... V3 version significantly improves the model performance on downstream tasks"
-- https://huggingface.co/microsoft/graphcodebert-base
-  A 'Graphformer' (GNN-nested Transformers) "which also considers data-flow information along with code sequences" ... "trained on the CodeSearchNet dataset, which includes 2.3M functions with document pairs for six programming languages". See also:
-  - https://github.com/microsoft/CodeBERT
-    the repo contains GraphCodeBERT plus additional models below
+- **DeBERTa**: "improves the BERT and RoBERTa models using disentangled attention and enhanced mask decoder. With those two improvements, DeBERTa out perform RoBERTa on a majority of NLU tasks" and "using ELECTRA-Style pre-training ... V3 version significantly improves the model performance on downstream tasks"
+  - https://huggingface.co/microsoft/deberta-v3-base
+- **CodeBERT**:  
+  Various models, perhaps evolving in pursuit of performance.  
+  https://github.com/microsoft/CodeBERT
+  - https://huggingface.co/microsoft/graphcodebert-base
+    A 'Graphformer' (GNN-nested Transformers) "which also considers data-flow information along with code sequences" ... "trained on the CodeSearchNet dataset, which includes 2.3M functions with document pairs for six programming languages". See also:
   - https://arxiv.org/pdf/2009.08366.pdf "GraphCodeBERT, a pre-trained model for programming language that considers the inherent structure of code". The graphs in training are based on dataflow analysis, rather than AST (which usually has an unnecessrily deep and noisy structure). In their results it outperforms CodeBERT below, as well as a RoBERTa pre-trained on code.
     - this looks like the raw dataset https://huggingface.co/datasets/code_search_net ...this doesn't have the dataflow graph though
     - the paper doesn't say exactly how the dataflow graphs are generated, but looks like the code is here: https://github.com/microsoft/CodeBERT/tree/master/GraphCodeBERT/codesearch/parser
