@@ -168,7 +168,8 @@ def get_input_types(
             input_desc = input_descs["encoder_outputs"]
             shape = list(dummy_inputs["encoder_outputs"][0].shape)
             # shape[0] = ct.RangeDim()  # batch size  #TODO
-            shape[1] = ct.RangeDim()
+            # TODO: only disable if we are using fixed shapes (which could be part of the configuration)
+            # shape[1] = ct.RangeDim()
             input_types.append(
                 ct.TensorType(
                     name=input_desc.name, shape=ct.Shape(shape), dtype=np.float32
@@ -618,7 +619,15 @@ def export_pytorch(
         if input_desc.is_optional:
             spec.description.input[i].type.isOptional = True
 
-    user_defined_metadata = {}
+    user_defined_metadata = {
+        "co.huggingface.exporters.name": model.name_or_path,
+        "co.huggingface.exporters.task": config.task,
+        "co.huggingface.exporters.architecture": next(
+            iter(model.config.architectures), ""
+        ),
+        "co.huggingface.exporters.framework": "pytorch",
+        "co.huggingface.exporters.precision": quantize,
+    }
     if model.config.transformers_version:
         user_defined_metadata[
             "transformers_version"
@@ -667,6 +676,8 @@ def export_pytorch(
     if len(user_defined_metadata) > 0:
         spec.description.metadata.userDefined.update(user_defined_metadata)
 
+    spec.description.metadata.shortDescription = config.short_description
+
     # Reload the model in case any input / output names were changed.
     mlmodel = ct.models.MLModel(mlmodel._spec, weights_dir=mlmodel.weights_dir)
 
@@ -676,36 +687,6 @@ def export_pytorch(
         )
 
     return mlmodel
-
-
-def export_tensorflow(
-    preprocessor: Union[
-        "PreTrainedTokenizer", "FeatureExtractionMixin", "ProcessorMixin"
-    ],
-    model: "TFPreTrainedModel",
-    config: CoreMLConfig,
-    quantize: str = "float32",
-    compute_units: ct.ComputeUnit = ct.ComputeUnit.ALL,
-) -> ct.models.MLModel:
-    """
-    Export a TensorFlow model to Core ML format.
-
-    Args:
-        preprocessor ([`PreTrainedTokenizer`] or [`FeatureExtractionMixin`] or [`ProcessorMixin`]):
-            The preprocessor used for encoding the data.
-        model ([`TFPreTrainedModel`]):
-            The model to export.
-        config ([`~coreml.config.CoreMLConfig`]):
-            The Core ML configuration associated with the exported model.
-        quantize (`str`, *optional*, defaults to `"float32"`):
-            Quantization options. Possible values: `"float32"`, `"float16"`.
-        compute_units (`ct.ComputeUnit`, *optional*, defaults to `ct.ComputeUnit.ALL`):
-            Whether to optimize the model for CPU, GPU, and/or Neural Engine.
-
-    Returns:
-        `ct.models.MLModel`: the Core ML model object
-    """
-    raise AssertionError("Core ML export does not currently support TensorFlow models")
 
 
 def export(
@@ -737,13 +718,11 @@ def export(
     """
     if not (is_torch_available() or is_tf_available()):
         raise ImportError(
-            "Cannot convert because neither PyTorch nor TensorFlow are not installed. "
+            "Cannot convert because neither PyTorch nor TensorFlow are installed. "
             "Please install torch or tensorflow first."
         )
 
     if is_torch_available() and issubclass(type(model), PreTrainedModel):
         return export_pytorch(preprocessor, model, config, quantize, compute_units)
-    elif is_tf_available() and issubclass(type(model), TFPreTrainedModel):
-        return export_tensorflow(preprocessor, model, config, quantize, compute_units)
     else:
         raise ValueError(f"Cannot convert unknown model type: {type(model)}")

@@ -43,11 +43,16 @@ exclude = [
 [[tool.mypy.overrides]]
 module = [
     "ane_transformers.*",
+    "exporters.*",
     "art.*",
     "asitop.*",
     "beaupy.*",
     "coremltools.*",
     "huggingface_hub.*",
+    "numpy.*",
+    "rich.*",
+    "rich_argparse.*",
+    "torch.*",
     "transformers.*",
 ]
 ignore_missing_imports = true

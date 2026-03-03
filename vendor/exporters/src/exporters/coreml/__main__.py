@@ -113,7 +113,7 @@ def main():
         "--quantize",
         type=str,
         choices=["float32", "float16"],
-        default="float32",
+        default="float16",
         help="Quantization option for the model weights.",
     )
     parser.add_argument(

@@ -20,6 +20,7 @@ from transformers.modeling_utils import PreTrainedModel
 from transformers.utils.generic import TensorType
 
 from hft2ane.exceptions import ModelNotFoundError
+from exporters.coreml.features import FeaturesManager
 from hft2ane.mappings import get_hft2ane_model_names, get_task
 from hft2ane.convert.convert import (
     PreprocessorT,
@@ -28,7 +29,9 @@ from hft2ane.convert.convert import (
     hf_to_coreml,
     METADATA_MODEL_NAME_KEY,
     METADATA_MODEL_CLS_KEY,
+    METADATA_MODEL_SEQ_LEN_KEY,
 )
+from transformers.onnx.utils import get_preprocessor
 from hft2ane.evaluate.evaluate import (
     confirm_ane_via_powermetrics,
     get_dummy_inputs,
@@ -334,9 +337,20 @@ def verify(args: argparse.Namespace):
         args.confirm_ane,
     )
 
+    task = get_task(type(base_model))
+    _, model_coreml_config = FeaturesManager.check_supported_model_or_raise(
+        base_model, feature=task
+    )
+    seq_len_str = coreml_model.user_defined_metadata.get(METADATA_MODEL_SEQ_LEN_KEY)
+    overrides = {"sequenceLength": int(seq_len_str)} if seq_len_str else {}
+    config = model_coreml_config(base_model.config, overrides=overrides)
+    preprocessor = get_preprocessor(model_name)
+
     _verify(
         base_model=base_model,
         converted=coreml_model,
+        preprocessor=preprocessor,
+        config=config,
         fail_on_sanity_check=fail_on_sanity_check,
         confirm_ane=confirm_ane,
     )
@@ -356,7 +370,6 @@ def _verify(
     pkg_path = os.path.relpath(converted.package_path)
 
     try:
-        breakpoint()
         validate_model_outputs(
             config=config,
             preprocessor=preprocessor,

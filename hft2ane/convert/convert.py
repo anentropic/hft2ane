@@ -1,5 +1,5 @@
 import os
-from typing import Any, Type
+from typing import Any, Type, Union
 from warnings import warn
 
 import torch
@@ -40,9 +40,9 @@ from the model's HF repo (as opposed to only the `transformers` package)
 """
 
 
-ModelT = Type[PreTrainedModel] | Type[_BaseAutoModelClass]
+ModelT = Union[Type[PreTrainedModel], Type[_BaseAutoModelClass]]
 
-PreprocessorT = PreTrainedTokenizerBase | FeatureExtractionMixin | ProcessorMixin
+PreprocessorT = Union[PreTrainedTokenizerBase, FeatureExtractionMixin, ProcessorMixin]
 
 
 METADATA_MODEL_NAME_KEY = "com.github.anentropic.hft2ane.model"
@@ -156,10 +156,11 @@ def hf_to_coreml(
         hft2ane_model, feature=task
     )
 
-    if sequence_length is None:
-        overrides = {"inferSequenceLengthFromConfig": True}
-    else:
-        overrides = {"sequenceLength": sequence_length}
+    overrides: dict[str, Any] = (
+        {"inferSequenceLengthFromConfig": True}
+        if sequence_length is None
+        else {"sequenceLength": sequence_length}
+    )
 
     # TODO: use_past (pre-cached Decoder) or seq2seq (EncoderDecoder)
     coreml_config = model_coreml_config(hft2ane_model.config, overrides=overrides)

@@ -229,6 +229,12 @@ class FeaturesManager:
             "text-generation-with-past",
             coreml_config_cls="models.ernie.ErnieCoreMLConfig",
         ),
+        "falcon": supported_features_mapping(
+            "feature-extraction",
+            "text-generation",
+            "text-classification",
+            coreml_config_cls="models.falcon.FalconCoreMLConfig",
+        ),
         "gpt2": supported_features_mapping(
             "feature-extraction",
             # "feature-extraction-with-past",
@@ -237,6 +243,12 @@ class FeaturesManager:
             "text-classification",
             "token-classification",
             coreml_config_cls="models.gpt2.GPT2CoreMLConfig",
+        ),
+        "gpt_bigcode": supported_features_mapping(
+            "feature-extraction",
+            "text-generation",
+            "text-classification",
+            coreml_config_cls="models.gpt_bigcode.GPTBigcodeCoreMLConfig",
         ),
         "gptj": supported_features_mapping(
             "feature-extraction",
@@ -264,6 +276,12 @@ class FeaturesManager:
             "image-classification",
             coreml_config_cls="models.levit.LevitCoreMLConfig",
         ),
+        "llama": supported_features_mapping(
+            "feature-extraction",
+            "text-generation",
+            "text-classification",
+            coreml_config_cls="models.llama.LlamaCoreMLConfig",
+        ),
         "m2m_100": supported_features_mapping(
             "feature-extraction",
             "text2text-generation",
@@ -273,6 +291,12 @@ class FeaturesManager:
             "feature-extraction",
             "text2text-generation",
             coreml_config_cls="models.marian.MarianMTCoreMLConfig",
+        ),
+        "mistral": supported_features_mapping(
+            "feature-extraction",
+            "text-generation",
+            "text-classification",
+            coreml_config_cls="models.mistral.MistralCoreMLConfig",
         ),
         "mobilebert": supported_features_mapping(
             "feature-extraction",
@@ -285,6 +309,12 @@ class FeaturesManager:
             coreml_config_cls="models.mobilebert.MobileBertCoreMLConfig",
         ),
         "mobilevit": supported_features_mapping(
+            "feature-extraction",
+            "image-classification",
+            "semantic-segmentation",
+            coreml_config_cls="models.mobilevit.MobileViTCoreMLConfig",
+        ),
+        "mobilevitv2": supported_features_mapping(
             "feature-extraction",
             "image-classification",
             "semantic-segmentation",

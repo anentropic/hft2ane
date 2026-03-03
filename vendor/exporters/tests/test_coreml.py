@@ -57,7 +57,7 @@ class CoreMLConfigTestCase(TestCase):
         self.assertEqual(len(flexible_output), 1)
         self.assertEqual(flexible_output[0]["axis"], 1)
         self.assertEqual(flexible_output[0]["min"], 1)
-        self.assertEqual(flexible_output[0]["max"], config.maxSequenceLength)
+        self.assertEqual(flexible_output[0]["max"], config.max_sequence_length)
 
         config = TextCoreMLConfig(None, task="text-classification")
         flexible_outputs = config.get_flexible_outputs()
@@ -74,6 +74,7 @@ PYTORCH_EXPORT_MODELS = {
     ("levit", "facebook/levit-128S"),
     ("mobilebert", "google/mobilebert-uncased"),
     ("mobilevit", "apple/mobilevit-small"),
+    ("mobilevitv2", "apple/mobilevitv2-1.0-imagenet1k-256"),
     ("segformer", "nvidia/mit-b0"),
     ("squeezebert", "squeezebert/squeezebert-uncased"),
     ("t5", "t5-small"),
