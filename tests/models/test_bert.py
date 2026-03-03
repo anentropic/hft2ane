@@ -24,8 +24,8 @@ from hft2ane.models.bert import (
     BertForMultipleChoice,
     BertForNextSentencePrediction,
 )
-from hft2ane.tools.convert import to_coreml
-from hft2ane.tools.evaluate import (
+from hft2ane.convert.convert import to_coreml
+from hft2ane.evaluate.evaluate import (
     get_dummy_inputs,
     measure_ane_speedup_from_converted,
 )
@@ -529,7 +529,7 @@ def test_export(model_name, hf_model_cls, get_inputs, example, tmp_path_factory)
     # however actual model usage requires more, e.g. `get_inputs` for sequence classification
     # returns a mapping with: `input_ids`, `token_type_ids`, `attention_mask`
     # (this is also what prevents MultipleChoice from converting currently)
-    # TODO: see `tokenizer.model_input_names` for the names of the inputs
+    # TODO: see `tokenizer.model_input_names` for the names of the inputs
     np_inputs = {k: v.numpy().astype(np.int32) for k, v in inputs.items()}
     with torch.no_grad():
         baseline_outputs = (

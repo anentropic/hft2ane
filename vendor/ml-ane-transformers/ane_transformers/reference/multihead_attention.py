@@ -10,17 +10,18 @@ from .layer_norm import LayerNormANE
 
 
 class MultiHeadAttention(nn.Module):
-    """ Multi-Head Attention optimized for efficient ANE deployment
-    """
+    """Multi-Head Attention optimized for efficient ANE deployment"""
 
-    def __init__(self,
-                 embed_dim,
-                 d_qk=None,
-                 d_v=None,
-                 d_out=None,
-                 n_head=8,
-                 dropout=0.1,
-                 **kwargs):
+    def __init__(
+        self,
+        embed_dim,
+        d_qk=None,
+        d_v=None,
+        d_out=None,
+        n_head=8,
+        dropout=0.1,
+        **kwargs,
+    ):
         """
         Args:
             embed_dim:          Dimensionality of the input embeddings
@@ -45,13 +46,13 @@ class MultiHeadAttention(nn.Module):
                 f"Either query-key dimensions ({self.d_qk}) or the value embeddings "
                 f"dimensions ({self.d_v}) is not divisible by n_head ({self.n_head})"
             )
-        self.q_normalize_fact = float(self.d_qk // self.n_head)**-0.5
+        self.q_normalize_fact = float(self.d_qk // self.n_head) ** -0.5
 
         self.q_proj = nn.Conv2d(embed_dim, self.d_qk, 1)
         self.v_proj = nn.Conv2d(embed_dim, self.d_v, 1)
         self.k_proj = nn.Conv2d(embed_dim, self.d_qk, 1)
         self.out_proj = nn.Conv2d(self.d_v, self.d_out, 1)
-        self.dropout = nn.Dropout(dropout) if dropout > 0. else nn.Identity()
+        self.dropout = nn.Dropout(dropout) if dropout > 0.0 else nn.Identity()
 
         self.apply(self._reset_parameters)
 
@@ -59,7 +60,7 @@ class MultiHeadAttention(nn.Module):
     def _reset_parameters(module):
         if isinstance(module, nn.Conv2d):
             nn.init.xavier_uniform_(module.weight)
-            nn.init.constant_(module.bias, 0.)
+            nn.init.constant_(module.bias, 0.0)
 
     def _attention_fn(self, q, k, v, qk_mask, k_mask, return_weights):
         """Core routine for computing multi-head attention
@@ -72,7 +73,7 @@ class MultiHeadAttention(nn.Module):
                             Indices with the a high negative value, e.g. -1e4, are excluded from attention
             k_mask:         Float tensor of shape (batch_size, src_seq_len, 1, 1).
                             Indices with the a high negative value, e.g. -1e4, are excluded from attention
-        
+
         Returns:
             attn:           Attention embeddings of shape (batch_size, d_v, 1, tgt_seq_len)
             attn_weights:   If `return_weights` is True, returns the softmax attention weights used to compute the attention matrix
@@ -80,19 +81,19 @@ class MultiHeadAttention(nn.Module):
         # Principle 2: Chunking Large Intermediate Tensors  (machinelearning.apple.com/research/apple-neural-engine)
         # Split q, k and v to compute a list of single-head attention functions
         mh_q = q.split(
-            self.d_qk // self.n_head,
-            dim=1)  # n_head * (batch_size, d_qk/n_head, 1, tgt_seq_len)
+            self.d_qk // self.n_head, dim=1
+        )  # n_head * (batch_size, d_qk/n_head, 1, tgt_seq_len)
         # Principle 3: Minimizing Memory Copies
         # Avoid as many transposes and reshapes as possible
         mh_k = k.transpose(1, 3).split(
-            self.d_qk // self.n_head,
-            dim=3)  # n_head * (batch_size, src_seq_len, 1, d_qk/n_head)
+            self.d_qk // self.n_head, dim=3
+        )  # n_head * (batch_size, src_seq_len, 1, d_qk/n_head)
         mh_v = v.split(
-            self.d_v // self.n_head,
-            dim=1)  # n_head * (batch_size, d_v/n_head, 1, src_seq_len)
+            self.d_v // self.n_head, dim=1
+        )  # n_head * (batch_size, d_v/n_head, 1, src_seq_len)
 
         attn_weights = [
-            torch.einsum('bchq,bkhc->bkhq', [qi, ki]) * self.q_normalize_fact
+            torch.einsum("bchq,bkhc->bkhq", [qi, ki]) * self.q_normalize_fact
             for qi, ki in zip(mh_q, mh_k)
         ]  # n_head * (batch_size, src_seq_len, 1, tgt_seq_len)
 
@@ -104,14 +105,15 @@ class MultiHeadAttention(nn.Module):
             for head_idx in range(self.n_head):
                 attn_weights[head_idx] = attn_weights[head_idx] + k_mask
 
-        attn_weights = [aw.softmax(dim=1) for aw in attn_weights
-                        ]  # n_head * (batch_size, src_seq_len, 1, tgt_seq_len)
-        mh_w = [self.dropout(aw) for aw in attn_weights
-                ]  # n_head * (batch_size, src_seq_len, 1, tgt_seq_len)
+        attn_weights = [
+            aw.softmax(dim=1) for aw in attn_weights
+        ]  # n_head * (batch_size, src_seq_len, 1, tgt_seq_len)
+        mh_w = [
+            self.dropout(aw) for aw in attn_weights
+        ]  # n_head * (batch_size, src_seq_len, 1, tgt_seq_len)
 
         attn = [
-            torch.einsum('bkhq,bchk->bchq', wi, vi)
-            for wi, vi in zip(mh_w, mh_v)
+            torch.einsum("bkhq,bchk->bchq", wi, vi) for wi, vi in zip(mh_w, mh_v)
         ]  # n_head * (batch_size, d_v/n_head, 1, tgt_seq_len)
         attn = torch.cat(attn, dim=1)  # (batch_size, d_v, 1, tgt_seq_len)
 
@@ -200,8 +202,9 @@ class MultiHeadAttention(nn.Module):
                 )
 
         # Call the attention function
-        attn, attn_weights = self._attention_fn(q, k, v, qk_mask, k_mask,
-                                                return_weights)
+        attn, attn_weights = self._attention_fn(
+            q, k, v, qk_mask, k_mask, return_weights
+        )
 
         # Revert to original dimension permutation
         attn = attn.contiguous().view(b, self.d_v, ht, wt)
@@ -217,10 +220,9 @@ class MultiHeadAttention(nn.Module):
 
 
 class ResidualMultiHeadAttention(MultiHeadAttention):
-
     def __init__(self, embed_dim, dropout=0.1, drop_fn=nn.Dropout, **kwargs):
         super().__init__(embed_dim, dropout=dropout, **kwargs)
-        self.drop_fn = drop_fn(dropout) if dropout > 0. else nn.Identity()
+        self.drop_fn = drop_fn(dropout) if dropout > 0.0 else nn.Identity()
         self.norm = LayerNormANE(embed_dim)
 
     def forward(self, q, k, v, **kwargs):
@@ -229,23 +231,19 @@ class ResidualMultiHeadAttention(MultiHeadAttention):
 
 
 class SelfAttention(MultiHeadAttention):
-
     def forward(self, qkv, **kwargs):
         return super()._forward_impl(qkv, qkv, qkv, **kwargs)
 
 
 class ResidualSelfAttention(ResidualMultiHeadAttention):
-
     def forward(self, qkv, **kwargs):
         attn, attn_weights = self._forward_impl(qkv, qkv, qkv, **kwargs)
         return self.norm(self.drop_fn(attn) + qkv), attn_weights
 
 
 class PreNormResidualSelfAttention(ResidualSelfAttention):
-
     def forward(self, qkv, **kwargs):
         norm_qkv = self.norm(qkv)
-        attn, attn_weights = self._forward_impl(norm_qkv, norm_qkv, norm_qkv,
-                                                **kwargs)
+        attn, attn_weights = self._forward_impl(norm_qkv, norm_qkv, norm_qkv, **kwargs)
         result = self.drop_fn(attn) + qkv
         return result, attn_weights

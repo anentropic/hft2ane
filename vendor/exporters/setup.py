@@ -16,7 +16,6 @@ setup(
         "transformers >= 4.26.1",
         "coremltools >= 5.0",
     ],
-    classifiers=[
-    ],
+    classifiers=[],
     license="Apache",
 )

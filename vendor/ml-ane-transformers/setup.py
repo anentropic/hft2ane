@@ -2,17 +2,17 @@ from setuptools import setup, find_packages
 
 from ane_transformers._version import __version__
 
-with open('README.md') as f:
+with open("README.md") as f:
     readme = f.read()
 
 setup(
-    name='ane_transformers',
+    name="ane_transformers",
     version=__version__,
-    url='https://github.com/apple/ml-ane-transformers',
+    url="https://github.com/apple/ml-ane-transformers",
     description="Reference PyTorch implementation of Transformers for Apple Neural Engine (ANE) deployment",
     long_description=readme,
-    long_description_content_type='text/markdown',
-    author='Apple Inc.',
+    long_description_content_type="text/markdown",
+    author="Apple Inc.",
     install_requires=[
         "torch>=1.10.0,<=1.11.0",
         "coremltools>=5.2.0",

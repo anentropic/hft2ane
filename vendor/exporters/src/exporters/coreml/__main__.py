@@ -31,8 +31,12 @@ from .validate import validate_model_outputs
 from ..utils import logging
 
 
-def convert_model(preprocessor, model, model_coreml_config, args, use_past=False, seq2seq=None):
-    coreml_config = model_coreml_config(model.config, use_past=use_past, seq2seq=seq2seq)
+def convert_model(
+    preprocessor, model, model_coreml_config, args, use_past=False, seq2seq=None
+):
+    coreml_config = model_coreml_config(
+        model.config, use_past=use_past, seq2seq=seq2seq
+    )
 
     compute_units = ComputeUnit.ALL
     if args.compute_units == "cpu_and_gpu":
@@ -75,7 +79,11 @@ def convert_model(preprocessor, model, model_coreml_config, args, use_past=False
 def main():
     parser = ArgumentParser("Hugging Face Transformers Core ML exporter")
     parser.add_argument(
-        "-m", "--model", type=str, required=True, help="Model ID on huggingface.co or path on disk to load model from."
+        "-m",
+        "--model",
+        type=str,
+        required=True,
+        help="Model ID on huggingface.co or path on disk to load model from.",
     )
     parser.add_argument(
         "--feature",
@@ -84,19 +92,36 @@ def main():
         help="The type of features to export the model with.",
     )
     parser.add_argument(
-        "--atol", type=float, default=None, help="Absolute difference tolerence when validating the model."
+        "--atol",
+        type=float,
+        default=None,
+        help="Absolute difference tolerence when validating the model.",
     )
     parser.add_argument(
-        "--use_past", action="store_true", help="Export the model with precomputed hidden states (key and values in the attention blocks) for fast autoregressive decoding."
+        "--use_past",
+        action="store_true",
+        help="Export the model with precomputed hidden states (key and values in the attention blocks) for fast autoregressive decoding.",
     )
     parser.add_argument(
-        "--framework", type=str, choices=["pt", "tf"], default="pt", help="The framework to use for the Core ML export."
+        "--framework",
+        type=str,
+        choices=["pt", "tf"],
+        default="pt",
+        help="The framework to use for the Core ML export.",
     )
     parser.add_argument(
-        "--quantize", type=str, choices=["float32", "float16"], default="float32", help="Quantization option for the model weights."
+        "--quantize",
+        type=str,
+        choices=["float32", "float16"],
+        default="float32",
+        help="Quantization option for the model weights.",
     )
     parser.add_argument(
-        "--compute_units", type=str, choices=["all", "cpu_and_gpu", "cpu_only", "cpu_and_ne"], default="all", help="Optimize the model for CPU, GPU, and/or Neural Engine."
+        "--compute_units",
+        type=str,
+        choices=["all", "cpu_and_gpu", "cpu_only", "cpu_and_ne"],
+        default="all",
+        help="Optimize the model for CPU, GPU, and/or Neural Engine.",
     )
     # parser.add_argument("--cache_dir", type=str, default=None, help="Path indicating where to store cache.")
     parser.add_argument(
@@ -106,11 +131,17 @@ def main():
         default="auto",
         help="Which type of preprocessor to use. 'auto' tries to automatically detect it.",
     )
-    parser.add_argument("output", type=Path, help="Path indicating where to store generated Core ML model.")
+    parser.add_argument(
+        "output",
+        type=Path,
+        help="Path indicating where to store generated Core ML model.",
+    )
 
     args = parser.parse_args()
 
-    if (not args.output.is_file()) and (args.output.suffix not in [".mlpackage", ".mlmodel"]):
+    if (not args.output.is_file()) and (
+        args.output.suffix not in [".mlpackage", ".mlmodel"]
+    ):
         args.output = args.output.joinpath("Model.mlpackage")
     if not args.output.parent.exists():
         args.output.parent.mkdir(parents=True)
@@ -126,22 +157,28 @@ def main():
         preprocessor = AutoProcessor.from_pretrained(args.model)
     else:
         raise ValueError(f"Unknown preprocessor type '{args.preprocessor}'")
-    
+
     # Support legacy task names in CLI only
     feature = args.feature
     args.feature = FeaturesManager.map_from_synonym(args.feature)
     if feature != args.feature:
-        deprecation_message = f"Feature '{feature}' is deprecated, please use '{args.feature}' instead."
+        deprecation_message = (
+            f"Feature '{feature}' is deprecated, please use '{args.feature}' instead."
+        )
         warnings.warn(deprecation_message, FutureWarning)
 
     # Allocate the model
     model = FeaturesManager.get_model_from_feature(
-        args.feature, args.model, framework=args.framework, #cache_dir=args.cache_dir
+        args.feature,
+        args.model,
+        framework=args.framework,  # cache_dir=args.cache_dir
     )
-    model_kind, model_coreml_config = FeaturesManager.check_supported_model_or_raise(model, feature=args.feature)
+    model_kind, model_coreml_config = FeaturesManager.check_supported_model_or_raise(
+        model, feature=args.feature
+    )
 
     if args.feature in ["text2text-generation", "speech-seq2seq"]:
-        logger.info(f"Converting encoder model...")
+        logger.info("Converting encoder model...")
 
         convert_model(
             preprocessor,
@@ -149,10 +186,10 @@ def main():
             model_coreml_config,
             args,
             use_past=False,
-            seq2seq="encoder"
+            seq2seq="encoder",
         )
 
-        logger.info(f"Converting decoder model...")
+        logger.info("Converting decoder model...")
 
         convert_model(
             preprocessor,
@@ -160,7 +197,7 @@ def main():
             model_coreml_config,
             args,
             use_past=args.use_past,
-            seq2seq="decoder"
+            seq2seq="decoder",
         )
     else:
         convert_model(

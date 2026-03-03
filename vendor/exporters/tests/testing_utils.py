@@ -23,20 +23,27 @@ try:
     _coreml_version = importlib_metadata.version("coremltools")
 
     from coremltools.models.utils import _is_macos, _macos_version
+
     _macos_available = _is_macos() and _macos_version() >= (12, 0)
 
 except importlib_metadata.PackageNotFoundError:
     _coreml_available = False
     _macos_available = False
 
+
 def is_coreml_available():
     return _coreml_available
+
 
 def is_macos_available():
     return _macos_available
 
+
 def require_coreml(test_case):
-    return unittest.skipUnless(is_coreml_available(), "test requires Core ML")(test_case)
+    return unittest.skipUnless(is_coreml_available(), "test requires Core ML")(
+        test_case
+    )
+
 
 def require_macos(test_case):
     return unittest.skipUnless(is_macos_available(), "test requires macOS")(test_case)

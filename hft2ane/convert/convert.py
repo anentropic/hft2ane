@@ -7,6 +7,7 @@ import coremltools as ct
 import numpy as np
 from exporters.coreml.config import CoreMLConfig
 from exporters.coreml.convert import export
+from exporters.coreml.features import FeaturesManager
 from huggingface_hub import model_info
 from huggingface_hub.utils import HfHubHTTPError
 from transformers import AutoFeatureExtractor, AutoProcessor, AutoTokenizer
@@ -17,7 +18,6 @@ from transformers.processing_utils import ProcessorMixin
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from transformers.onnx.utils import get_preprocessor
 
-from hft2ane.convert.monkeys import FeaturesManager, PatchedConfig
 from hft2ane.mappings import get_hft2ane_model
 from hft2ane.utils.introspection import model_config
 
@@ -47,6 +47,7 @@ PreprocessorT = PreTrainedTokenizerBase | FeatureExtractionMixin | ProcessorMixi
 
 METADATA_MODEL_NAME_KEY = "com.github.anentropic.hft2ane.model"
 METADATA_MODEL_CLS_KEY = "com.github.anentropic.hft2ane.type"
+METADATA_MODEL_SEQ_LEN_KEY = "com.github.anentropic.hft2ane.sequenceLength"
 
 
 def get_baseline_model(model_name: str, model_cls: ModelT) -> PreTrainedModel:
@@ -113,7 +114,10 @@ def _get_ct_outputs(model: PreTrainedModel) -> list[ct.TensorType]:
 
 
 def _set_metadata(
-    mlmodel: ct.models.MLModel, model_name: str, model_cls_name: str | None
+    mlmodel: ct.models.MLModel,
+    model_name: str,
+    model_cls_name: str | None,
+    sequence_length: int | None = None,
 ) -> None:
     try:
         hfinfo = model_info(model_name)
@@ -134,6 +138,8 @@ def _set_metadata(
             "for compatibility with execution on Neural Engine."
         )
     mlmodel.user_defined_metadata[METADATA_MODEL_NAME_KEY] = model_name
+    if sequence_length is not None:
+        mlmodel.user_defined_metadata[METADATA_MODEL_SEQ_LEN_KEY] = str(sequence_length)
     if model_cls_name:
         mlmodel.user_defined_metadata[METADATA_MODEL_CLS_KEY] = model_cls_name
 
@@ -149,8 +155,14 @@ def hf_to_coreml(
     _, model_coreml_config = FeaturesManager.check_supported_model_or_raise(
         hft2ane_model, feature=task
     )
+
+    if sequence_length is None:
+        overrides = {"inferSequenceLengthFromConfig": True}
+    else:
+        overrides = {"sequenceLength": sequence_length}
+
     # TODO: use_past (pre-cached Decoder) or seq2seq (EncoderDecoder)
-    coreml_config = model_coreml_config(hft2ane_model.config)
+    coreml_config = model_coreml_config(hft2ane_model.config, overrides=overrides)
 
     model_name = hft2ane_model.name_or_path
 
@@ -164,32 +176,26 @@ def hf_to_coreml(
         preprocessor = AutoFeatureExtractor.from_pretrained(model_name)
     elif preprocessor_name == "processor":
         preprocessor = AutoProcessor.from_pretrained(model_name)
-    
+
     if not preprocessor:
-        raise ValueError(f"Unknown preprocessor type '{preprocessor_name}' for '{model_name}'")
-
-    # fix the sequence length - coremltools does not like einsum with flexible dims
-    # https://github.com/apple/coremltools/issues/1763
-    seq_len = sequence_length
-    if seq_len:
-        seq_len = min(seq_len, preprocessor.model_max_length)
-    else:
-        if isinstance(coreml_config.inputs['input_ids'].sequence_length, tuple):
-            seq_len = coreml_config.inputs['input_ids'].sequence_length[1]
-        else:
-            seq_len = coreml_config.inputs['input_ids'].sequence_length
-
-    patched_config = PatchedConfig(coreml_config, seq_len)
+        raise ValueError(
+            f"Unknown preprocessor type '{preprocessor_name}' for '{model_name}'"
+        )
 
     converted = export(
         preprocessor,
         hft2ane_model,
-        patched_config,
+        coreml_config,
         quantize="float16",
     )
     # so far HF `export` doesn't set author etc metadata
     # (but it does set input/output descriptions and classifier config)
-    _set_metadata(converted, model_name, hft2ane_model.__class__.__name__)
+    _set_metadata(
+        converted,
+        model_name,
+        hft2ane_model.__class__.__name__,
+        coreml_config.sequenceLength,
+    )
 
     # workaround for https://github.com/apple/coremltools/issues/1680
     ct.models.MLModel(
@@ -199,7 +205,7 @@ def hf_to_coreml(
     ).save(out_path)
 
     converted.package_path = os.path.abspath(out_path)
-    return converted, preprocessor, patched_config
+    return converted, preprocessor, coreml_config
 
 
 def to_coreml_internal(

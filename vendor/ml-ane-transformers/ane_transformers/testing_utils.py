@@ -19,8 +19,7 @@ def rough_timeit(callable, n):
 
 
 def compute_psnr(a, b):
-    """ Compute Peak-Signal-to-Noise-Ratio across two numpy.ndarray objects
-    """
+    """Compute Peak-Signal-to-Noise-Ratio across two numpy.ndarray objects"""
     max_b = np.abs(b).max()
     sumdeltasq = 0.0
 

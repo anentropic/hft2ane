@@ -9,15 +9,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-import torch
 import torch.nn as nn
 
 from . import encoder, decoder, multihead_attention, ffn
 
 
 class AppleNeuralEngineTransformer(nn.Module):
-    """ An Apple Neural Engine (ANE) optimized Transformer implementation
-    """
+    """An Apple Neural Engine (ANE) optimized Transformer implementation"""
 
     def __init__(
         self,
@@ -69,7 +67,8 @@ class AppleNeuralEngineTransformer(nn.Module):
                 nb_attention_heads,
                 dropout,
             ),
-            num_layers=nb_enc_layers)
+            num_layers=nb_enc_layers,
+        )
         self.decoder = decoder.TransformerDecoder(
             layer=decoder.TransformerDecoderLayer(
                 embed_dim,
@@ -80,7 +79,8 @@ class AppleNeuralEngineTransformer(nn.Module):
                 nb_attention_heads,
                 dropout,
             ),
-            num_layers=nb_dec_layers)
+            num_layers=nb_dec_layers,
+        )
 
         self.return_intermediate_decoder = return_intermediate_decoder_layers
         self.embed_dim = embed_dim
@@ -142,33 +142,49 @@ class AppleNeuralEngineTransformer(nn.Module):
 
         # Verify and prepare encoder inputs
         batch_size, _, _, src_seq_len = encoder_input.shape
-        assert_shape(encoder_input, "encoder_input",
-                     [batch_size, self.embed_dim, 1, src_seq_len])
+        assert_shape(
+            encoder_input, "encoder_input", [batch_size, self.embed_dim, 1, src_seq_len]
+        )
 
         if encoder_pos_embed is not None:
-            assert_shape(encoder_pos_embed, "encoder_pos_embed",
-                         [batch_size, self.embed_dim, 1, src_seq_len])
+            assert_shape(
+                encoder_pos_embed,
+                "encoder_pos_embed",
+                [batch_size, self.embed_dim, 1, src_seq_len],
+            )
         if encoder_k_mask is not None:
-            assert_shape(encoder_k_mask, "encoder_k_mask",
-                         [batch_size, src_seq_len, 1, 1])
+            assert_shape(
+                encoder_k_mask, "encoder_k_mask", [batch_size, src_seq_len, 1, 1]
+            )
         if encoder_qk_mask is not None:
-            assert_shape(encoder_qk_mask, "encoder_qk_mask",
-                         [batch_size, src_seq_len, 1, src_seq_len])
+            assert_shape(
+                encoder_qk_mask,
+                "encoder_qk_mask",
+                [batch_size, src_seq_len, 1, src_seq_len],
+            )
 
         # Verify and prepare decoder inputs
         batch_size, _, _, tgt_seq_len = decoder_input.shape
-        assert_shape(decoder_input, "decoder_input",
-                     [batch_size, self.embed_dim, 1, tgt_seq_len])
+        assert_shape(
+            decoder_input, "decoder_input", [batch_size, self.embed_dim, 1, tgt_seq_len]
+        )
 
         if decoder_pos_embed is not None:
-            assert_shape(decoder_pos_embed, "decoder_pos_embed",
-                         [batch_size, self.embed_dim, 1, tgt_seq_len])
+            assert_shape(
+                decoder_pos_embed,
+                "decoder_pos_embed",
+                [batch_size, self.embed_dim, 1, tgt_seq_len],
+            )
         if decoder_k_mask is not None:
-            assert_shape(decoder_k_mask, "decoder_k_mask",
-                         [batch_size, tgt_seq_len, 1, 1])
+            assert_shape(
+                decoder_k_mask, "decoder_k_mask", [batch_size, tgt_seq_len, 1, 1]
+            )
         if decoder_qk_mask is not None:
-            assert_shape(decoder_qk_mask, "decoder_qk_mask",
-                         [batch_size, tgt_seq_len, 1, tgt_seq_len])
+            assert_shape(
+                decoder_qk_mask,
+                "decoder_qk_mask",
+                [batch_size, tgt_seq_len, 1, tgt_seq_len],
+            )
 
         # TransformerEncoder forward pass
         encoder_output = self.encoder(

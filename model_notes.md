@@ -38,6 +38,8 @@ Ones that look interesting to me...
   - https://github.com/lm-sys/FastChat#FastChat-T5 -> https://huggingface.co/lmsys/fastchat-t5-3b-v1.0 a finetuned Flan-T5-XL (3B) that beats Dolly v2 on the Vicuna benchmark. too big for ANE, but maybe useful with Metal backend for local Langchain etc.
 - **GPT** of course
   - see https://github.com/anentropic/experiments-coreml-gpt2#update for notes and related models
+    - https://arxiv.org/pdf/2305.07759.pdf "TinyStories" manages to train very small GPT-Neo models to write coherently
+    - ...or even respond to a ReAct prompt! https://huggingface.co/nikitastaf1996/TinyStories-Instruct-33M-react-medium-tasks-dirty (sort of, maybe not usefully... but it is only 33M!)
   - https://huggingface.co/MBZUAI/LaMini-GPT-1.5B somehow outperforms Alpaca LLaMA 7B on some metrics 🤯 (will be deeply underwhelming c/f ChatGTP of course). It is just GPT2-XL fine-tuned so the https://github.com/smpanaro/more-ane-transformers code should work.
   - See also:
     - https://huggingface.co/MBZUAI/LaMini-Flan-T5-783M

@@ -61,6 +61,7 @@ class InputDescription:
         color_layout (`str`, *optional*, defaults to `None`):
             Channel ordering for image inputs. Either `"RGB"` or `"BGR"`.
     """
+
     name: str
     description: str = ""
     is_optional: bool = False
@@ -86,6 +87,7 @@ class OutputDescription:
         do_argmax (`bool`, *optional*, defaults to `None`):
             For the `"semantic-segmentation"` task: Whether to perform an argmax operation on the predicted logits.
     """
+
     name: str
     description: str = ""
     do_softmax: Optional[bool] = None
@@ -93,7 +95,7 @@ class OutputDescription:
     do_argmax: Optional[bool] = None
 
 
-class CoreMLConfig():
+class CoreMLConfig:
     """
     Base class for Core ML exportable model describing metadata on how to export the model through the Core ML format.
 
@@ -105,12 +107,14 @@ class CoreMLConfig():
         seq2seq: `None` if not an encoder-decoder model, `"encoder"` to export the encoder
             part of a seq2seq model, `"decoder"` to export the decoder part.
     """
+
     def __init__(
         self,
         config: "PretrainedConfig",
         task: str,
         use_past: bool = False,
         seq2seq: Optional[str] = None,
+        overrides: Optional[Mapping[str, Any]] = None,
     ):
         if not hasattr(self, "modality"):
             raise ValueError("the CoreMLConfig subclass must have a modality property")
@@ -122,6 +126,7 @@ class CoreMLConfig():
         self.task = task
         self.use_past = use_past
         self.seq2seq = seq2seq
+        self.overrides = overrides or {}
 
     @classmethod
     def from_model_config(
@@ -130,6 +135,7 @@ class CoreMLConfig():
         task: str = "feature-extraction",
         use_past: bool = False,
         seq2seq: Optional[str] = None,
+        overrides: Optional[Mapping[str, Any]] = None,
     ) -> "CoreMLConfig":
         """
         Instantiate a `CoreMLConfig` for a specific model.
@@ -145,7 +151,9 @@ class CoreMLConfig():
         Returns:
             `CoreMLConfig` for this model
         """
-        return cls(config, task=task, use_past=use_past, seq2seq=seq2seq)
+        return cls(
+            config, task=task, use_past=use_past, seq2seq=seq2seq, overrides=overrides
+        )
 
     @classmethod
     def with_past(
@@ -153,6 +161,7 @@ class CoreMLConfig():
         config: "PretrainedConfig",
         task: str = "feature-extraction",
         seq2seq: Optional[str] = None,
+        overrides: Optional[Mapping[str, Any]] = None,
     ) -> "CoreMLConfig":
         """
         Instantiate a `CoreMLConfig` with `use_past` attribute set to True
@@ -166,7 +175,9 @@ class CoreMLConfig():
         Returns:
             `CoreMLVisionConfig` for this model with `.use_past = True`
         """
-        return cls(config, task=task, use_past=True, seq2seq=seq2seq)
+        return cls(
+            config, task=task, use_past=True, seq2seq=seq2seq, overrides=overrides
+        )
 
     @property
     def inputs(self) -> "OrderedDict[str, InputDescription]":
@@ -182,7 +193,7 @@ class CoreMLConfig():
 
     @property
     def inferSequenceLengthFromConfig(self) -> bool:
-        return False
+        return self.overrides.get("inferSequenceLengthFromConfig", False)
 
     @property
     def maxSequenceLength(self) -> int:
@@ -191,6 +202,23 @@ class CoreMLConfig():
             if hasattr(self._config, "max_position_embeddings"):
                 return self._config.max_position_embeddings
         return 128
+
+    @property
+    def sequenceLength(self) -> int:
+        """
+        hft2ane:
+        We have altered this class to use a fixed sequence length, because
+        coremltools does not like einsum with flexible dims
+        https://github.com/apple/coremltools/issues/1763
+
+        Since this gets baked into the exported model, we provide the ability
+        to override it.
+
+        TODO:
+        It might be possible to specify several pre-defined sequence lengths
+        https://coremltools.readme.io/docs/flexible-inputs#select-from-predetermined-shapes
+        """
+        return self.overrides.get("sequenceLength", self.maxSequenceLength)
 
     @property
     def _input_descriptions(self) -> "OrderedDict[str, InputDescription]":
@@ -202,28 +230,28 @@ class CoreMLConfig():
                         InputDescription(
                             "decoder_input_ids",
                             "Indices of decoder input sequence tokens in the vocabulary",
-                        )
+                        ),
                     ),
                     (
                         "decoder_attention_mask",
                         InputDescription(
                             "decoder_attention_mask",
                             "Mask to avoid performing attention on padding token indices (1 = not masked, 0 = masked)",
-                        )
+                        ),
                     ),
                     (
                         "encoder_outputs",
                         InputDescription(
                             "encoder_last_hidden_state",
                             "Sequence of hidden states at the output of the last layer of the encoder",
-                        )
+                        ),
                     ),
                     (
                         "attention_mask",
                         InputDescription(
                             "encoder_attention_mask",
                             "Mask to avoid performing attention on padding token indices (1 = not masked, 0 = masked)",
-                        )
+                        ),
                     ),
                 ]
             )
@@ -244,15 +272,15 @@ class CoreMLConfig():
                         InputDescription(
                             "input_ids",
                             "Indices of input sequence tokens in the vocabulary",
-                            sequence_length=(1, self.maxSequenceLength),
-                        )
+                            sequence_length=self.sequenceLength,
+                        ),
                     ),
                     (
                         "attention_mask",
                         InputDescription(
                             "attention_mask",
                             "Mask to avoid performing attention on padding token indices (1 = not masked, 0 = masked)",
-                        )
+                        ),
                     ),
                 ]
             )
@@ -268,22 +296,22 @@ class CoreMLConfig():
                         InputDescription(
                             "input_ids",
                             "Indices of input sequence tokens in the vocabulary",
-                            sequence_length=(1, self.maxSequenceLength),
-                        )
+                            sequence_length=self.sequenceLength,
+                        ),
                     ),
                     (
                         "attention_mask",
                         InputDescription(
                             "attention_mask",
                             "Mask to avoid performing attention on padding token indices (1 = not masked, 0 = masked)",
-                        )
+                        ),
                     ),
                     (
                         "token_type_ids",
                         InputDescription(
                             "token_type_ids",
                             "Segment token indices to indicate first and second portions of the inputs (0 = sentence A, 1 = sentence B)",
-                        )
+                        ),
                     ),
                 ]
             )
@@ -291,13 +319,13 @@ class CoreMLConfig():
         if self.modality == "vision" and self.task in [
             "feature-extraction",
             "object-detection",
-            "semantic-segmentation"
+            "semantic-segmentation",
         ]:
             return OrderedDict(
                 [
                     (
                         "pixel_values",
-                        InputDescription("image", "Input image", color_layout="RGB")
+                        InputDescription("image", "Input image", color_layout="RGB"),
                     ),
                 ]
             )
@@ -307,7 +335,9 @@ class CoreMLConfig():
                 [
                     (
                         "pixel_values",
-                        InputDescription("image", "Image to be classified", color_layout="RGB")
+                        InputDescription(
+                            "image", "Image to be classified", color_layout="RGB"
+                        ),
                     ),
                 ]
             )
@@ -317,11 +347,16 @@ class CoreMLConfig():
                 [
                     (
                         "pixel_values",
-                        InputDescription("image", "Image to be classified", color_layout="RGB")
+                        InputDescription(
+                            "image", "Image to be classified", color_layout="RGB"
+                        ),
                     ),
                     (
                         "bool_masked_pos",
-                        InputDescription("bool_masked_pos", "Indicates which patches are masked (1) and which aren't (0)"),
+                        InputDescription(
+                            "bool_masked_pos",
+                            "Indicates which patches are masked (1) and which aren't (0)",
+                        ),
                     ),
                 ]
             )
@@ -334,16 +369,16 @@ class CoreMLConfig():
                         "input_features",
                         "Mel features extracted from the raw speech waveform",
                         sequence_length=(1, -1),
-                    )
+                    ),
                 )
             else:
-                audio_input =  (
+                audio_input = (
                     "input_values",
                     InputDescription(
                         "input_values",
                         "Raw speech waveform",
                         sequence_length=(1, -1),
-                    )
+                    ),
                 )
 
             return OrderedDict(
@@ -354,12 +389,14 @@ class CoreMLConfig():
                         InputDescription(
                             "attention_mask",
                             "Mask to avoid performing attention on padding token indices (1 = not masked, 0 = masked)",
-                        )
+                        ),
                     ),
                 ]
             )
 
-        raise AssertionError(f"Unsupported task '{self.task}' for modality '{self.modality}'")
+        raise AssertionError(
+            f"Unsupported task '{self.task}' for modality '{self.modality}'"
+        )
 
     @property
     def outputs(self) -> "OrderedDict[str, OutputDescription]":
@@ -383,7 +420,7 @@ class CoreMLConfig():
                         OutputDescription(
                             "last_hidden_state",
                             "Sequence of hidden-states at the output of the last layer of the model",
-                        )
+                        ),
                     ),
                 ]
             )
@@ -402,14 +439,14 @@ class CoreMLConfig():
                             "probabilities",
                             "Probability of each category",
                             do_softmax=True,
-                        )
+                        ),
                     ),
                     (
                         "class_labels",
                         OutputDescription(
                             "classLabel",
                             "Category with the highest score",
-                        )
+                        ),
                     ),
                 ]
             )
@@ -423,7 +460,7 @@ class CoreMLConfig():
                             "logits",
                             "Classification scores (before softmax)",
                             do_softmax=False,
-                        )
+                        ),
                     ),
                 ]
             )
@@ -434,7 +471,7 @@ class CoreMLConfig():
             "fill-mask",
             "text2text-generation",
             "speech-seq2seq",
-            "token-classification"
+            "token-classification",
         ]:
             return OrderedDict(
                 [
@@ -444,7 +481,7 @@ class CoreMLConfig():
                             "token_scores",
                             "Classification scores for each vocabulary token (after softmax)",
                             do_softmax=True,
-                        )
+                        ),
                     ),
                 ]
             )
@@ -458,14 +495,14 @@ class CoreMLConfig():
                             "logits",
                             "Classification logits (including no-object) for all queries",
                             do_softmax=False,
-                        )
+                        ),
                     ),
                     (
                         "pred_boxes",
                         OutputDescription(
                             "pred_boxes",
                             "Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height)",
-                        )
+                        ),
                     ),
                 ]
             )
@@ -479,7 +516,7 @@ class CoreMLConfig():
                             "start_scores",
                             "Span-start scores (after softmax)",
                             do_softmax=True,
-                        )
+                        ),
                     ),
                     (
                         "end_logits",
@@ -487,7 +524,7 @@ class CoreMLConfig():
                             "end_scores",
                             "Span-end scores (after softmax)",
                             do_softmax=True,
-                        )
+                        ),
                     ),
                 ]
             )
@@ -503,12 +540,14 @@ class CoreMLConfig():
                             do_softmax=False,
                             do_upsample=True,
                             do_argmax=True,
-                        )
+                        ),
                     ),
                 ]
             )
 
-        raise AssertionError(f"Unsupported task '{self.task}' for modality '{self.modality}'")
+        raise AssertionError(
+            f"Unsupported task '{self.task}' for modality '{self.modality}'"
+        )
 
     def get_flexible_outputs(self) -> Mapping[str, List[Mapping[str, int]]]:
         """
@@ -543,25 +582,30 @@ class CoreMLConfig():
                     min_length, max_length = sequence_length
 
             if min_length is not None:
-                for key in ["last_hidden_state", "logits", "start_logits", "end_logits"]:
+                for key in [
+                    "last_hidden_state",
+                    "logits",
+                    "start_logits",
+                    "end_logits",
+                ]:
                     if key in output_descs:
                         output_shapes[key] = [
-                            #{ "axis": 0, "min": 1, "max": -1 },  # batch size  # TODO
-                            { "axis": 1, "min": min_length, "max": max_length },
+                            # { "axis": 0, "min": 1, "max": -1 },  # batch size  # TODO
+                            {"axis": 1, "min": min_length, "max": max_length},
                         ]
 
         if self.use_past:
             # TODO: Temporarily disabled until we can solve the issue with encoder past key/values
-            #name = "decoder_present" if self.seq2seq == "decoder" else "present"
+            # name = "decoder_present" if self.seq2seq == "decoder" else "present"
             name = "present"
             for i in range(self.num_layers):
                 output_shapes[f"{name}_{i}_key"] = [
-                    #{ "axis": 0, "min": 1, "max": -1 },  # batch size  # TODO
-                    { "axis": 2, "min": 1, "max": -1 },
+                    # { "axis": 0, "min": 1, "max": -1 },  # batch size  # TODO
+                    {"axis": 2, "min": 1, "max": -1},
                 ]
                 output_shapes[f"{name}_{i}_value"] = [
-                    #{ "axis": 0, "min": 1, "max": -1 },  # batch size  # TODO
-                    { "axis": 2, "min": 1, "max": -1 },
+                    # { "axis": 0, "min": 1, "max": -1 },  # batch size  # TODO
+                    {"axis": 2, "min": 1, "max": -1},
                 ]
 
             # TODO: Temporarily disabled until we can solve the issue with encoder past key/values
@@ -624,10 +668,14 @@ class CoreMLConfig():
         The number of attention heads retrieved from the model config. Override this for model configs where
         the number of attention heads attribute is not called `num_attention_heads`.
         """
-        if self.seq2seq == "encoder" and hasattr(self._config, "encoder_attention_heads"):
+        if self.seq2seq == "encoder" and hasattr(
+            self._config, "encoder_attention_heads"
+        ):
             return self._config.encoder_attention_heads
 
-        if self.seq2seq == "decoder" and hasattr(self._config, "decoder_attention_heads"):
+        if self.seq2seq == "decoder" and hasattr(
+            self._config, "decoder_attention_heads"
+        ):
             return self._config.decoder_attention_heads
 
         if not hasattr(self._config, "num_attention_heads"):
@@ -637,13 +685,19 @@ class CoreMLConfig():
             )
         return self._config.num_attention_heads
 
-    def fill_inputs_with_past_key_values_(self, inputs: "OrderedDict[str, InputDescription]"):
+    def fill_inputs_with_past_key_values_(
+        self, inputs: "OrderedDict[str, InputDescription]"
+    ):
         # TODO: Temporarily disabled until we can solve the issue with encoder past key/values
-        #name = "decoder_past_key_values" if self.seq2seq == "decoder" else "past_key_values"
+        # name = "decoder_past_key_values" if self.seq2seq == "decoder" else "past_key_values"
         name = "past_key_values"
         for i in range(self.num_layers):
-            inputs[f"{name}_{i}_key"] = InputDescription(f"{name}_{i}_key", is_optional=True)
-            inputs[f"{name}_{i}_value"] = InputDescription(f"{name}_{i}_value", is_optional=True)
+            inputs[f"{name}_{i}_key"] = InputDescription(
+                f"{name}_{i}_key", is_optional=True
+            )
+            inputs[f"{name}_{i}_value"] = InputDescription(
+                f"{name}_{i}_value", is_optional=True
+            )
 
         # TODO: Temporarily disabled until we can solve the issue with encoder past key/values
         # if self.seq2seq == "decoder":
@@ -652,7 +706,9 @@ class CoreMLConfig():
         #         inputs[f"{name}_{i}_key"] = InputDescription(f"{name}_{i}_key", is_optional=True)
         #         inputs[f"{name}_{i}_value"] = InputDescription(f"{name}_{i}_value", is_optional=True)
 
-    def fill_outputs_with_past_key_values_(self, outputs: "OrderedDict[str, OutputDescription]"):
+    def fill_outputs_with_past_key_values_(
+        self, outputs: "OrderedDict[str, OutputDescription]"
+    ):
         # TODO: Temporarily disabled until we can solve the issue with encoder past key/values
         # name = "decoder_present" if self.seq2seq == "decoder" else "present"
         name = "present"
@@ -717,7 +773,7 @@ class CoreMLConfig():
             "image-classification",
             "multiple-choice",
             "next-sentence-prediction",
-            "text-classification"
+            "text-classification",
         ]
         return self.task in classifier_tasks and self.outputs["logits"].do_softmax
 
@@ -768,7 +824,9 @@ class CoreMLConfig():
             image_height = image_size["height"]
             image_width = image_size["width"]
 
-        pixel_values = np.random.randint(0, 256, (image_width, image_height, 3), dtype=np.uint8)
+        pixel_values = np.random.randint(
+            0, 256, (image_width, image_height, 3), dtype=np.uint8
+        )
         coreml_value = Image.fromarray(pixel_values)
 
         # Hacky workaround: the Core ML input is the full-sized image, and so
@@ -813,7 +871,9 @@ class CoreMLConfig():
 
     def generate_dummy_inputs(
         self,
-        preprocessor: Union["PreTrainedTokenizerBase", "ImageProcessingMixin", "ProcessorMixin"],
+        preprocessor: Union[
+            "PreTrainedTokenizerBase", "ImageProcessingMixin", "ProcessorMixin"
+        ],
         framework: Optional[TensorType] = None,
     ) -> Mapping[str, Tuple[Any, Any]]:
         """
@@ -837,7 +897,9 @@ class CoreMLConfig():
         input_descs = self.inputs
         dummy_inputs = {}
 
-        if self.modality == "text" and isinstance(preprocessor, PreTrainedTokenizerBase):
+        if self.modality == "text" and isinstance(
+            preprocessor, PreTrainedTokenizerBase
+        ):
             if self.seq2seq == "decoder":
                 input_ids_name = "decoder_input_ids"
                 attention_mask_name = "decoder_attention_mask"
@@ -864,83 +926,148 @@ class CoreMLConfig():
 
             if attention_mask_name in input_descs:
                 attention_mask = np.ones(shape, dtype=np.int64)
-                dummy_inputs[attention_mask_name] = (attention_mask, attention_mask.astype(np.int32))
+                dummy_inputs[attention_mask_name] = (
+                    attention_mask,
+                    attention_mask.astype(np.int32),
+                )
 
             if "token_type_ids" in input_descs:
                 token_type_ids = np.zeros(shape, dtype=np.int64)
-                dummy_inputs["token_type_ids"] = (token_type_ids, token_type_ids.astype(np.int32))
+                dummy_inputs["token_type_ids"] = (
+                    token_type_ids,
+                    token_type_ids.astype(np.int32),
+                )
 
             if "encoder_outputs" in input_descs:
-                last_hidden_state = np.zeros((batch_size, encoder_sequence_length, self._config.hidden_size), dtype=np.float32)
+                last_hidden_state = np.zeros(
+                    (batch_size, encoder_sequence_length, self._config.hidden_size),
+                    dtype=np.float32,
+                )
                 dummy_inputs["encoder_outputs"] = (last_hidden_state, last_hidden_state)
 
             if self.seq2seq == "decoder" and "attention_mask" in input_descs:
-                encoder_attention_mask = np.ones((batch_size, encoder_sequence_length), dtype=np.int64)
-                dummy_inputs["attention_mask"] = (encoder_attention_mask, encoder_attention_mask.astype(np.int32))
+                encoder_attention_mask = np.ones(
+                    (batch_size, encoder_sequence_length), dtype=np.int64
+                )
+                dummy_inputs["attention_mask"] = (
+                    encoder_attention_mask,
+                    encoder_attention_mask.astype(np.int32),
+                )
 
             if self.task == "feature-extraction" and "decoder_input_ids" in input_descs:
                 # Special case for T5-like models
-                decoder_shape = (batch_size, sequence_length-5)
-                decoder_input_ids = np.random.randint(0, preprocessor.vocab_size, decoder_shape)
-                dummy_inputs["decoder_input_ids"] = (decoder_input_ids, decoder_input_ids.astype(np.int32))
+                decoder_shape = (batch_size, sequence_length - 5)
+                decoder_input_ids = np.random.randint(
+                    0, preprocessor.vocab_size, decoder_shape
+                )
+                dummy_inputs["decoder_input_ids"] = (
+                    decoder_input_ids,
+                    decoder_input_ids.astype(np.int32),
+                )
 
                 decoder_attention_mask = np.ones(decoder_shape, dtype=np.int64)
-                dummy_inputs["decoder_attention_mask"] = (decoder_attention_mask, decoder_attention_mask.astype(np.int32))
+                dummy_inputs["decoder_attention_mask"] = (
+                    decoder_attention_mask,
+                    decoder_attention_mask.astype(np.int32),
+                )
 
         elif (
             self.modality == "vision"
             and isinstance(preprocessor, ImageProcessingMixin)
             and preprocessor.model_input_names[0] == "pixel_values"
         ):
-            dummy_inputs["pixel_values"] = self._generate_dummy_image(preprocessor, framework)
+            dummy_inputs["pixel_values"] = self._generate_dummy_image(
+                preprocessor, framework
+            )
 
             if self.task == "masked-im":
                 num_patches = (self._config.image_size // self._config.patch_size) ** 2
-                bool_masked_pos = np.random.randint(low=0, high=2, size=(1, num_patches)).astype(bool)
-                dummy_inputs["bool_masked_pos"] = (bool_masked_pos, bool_masked_pos.astype(np.int32))
+                bool_masked_pos = np.random.randint(
+                    low=0, high=2, size=(1, num_patches)
+                ).astype(bool)
+                dummy_inputs["bool_masked_pos"] = (
+                    bool_masked_pos,
+                    bool_masked_pos.astype(np.int32),
+                )
 
         elif self.modality == "audio" and isinstance(preprocessor, ProcessorMixin):
             if self.seq2seq != "decoder":
                 if "input_features" in input_descs:
                     mel_bins = self._get_mel_bins()
                     if mel_bins == 0:
-                        raise ValueError("Cannot determine number of mel bins from model config")
+                        raise ValueError(
+                            "Cannot determine number of mel bins from model config"
+                        )
 
                     # TODO: some models (e.g. Whisper) may put the mel bins on another axis
 
                     input_desc = input_descs["input_features"]  # mel filterbanks
                     sequence_length = self._get_max_sequence_length(input_desc, 200)
-                    input_features = np.random.rand(batch_size, sequence_length, mel_bins).astype(np.float32)
+                    input_features = np.random.rand(
+                        batch_size, sequence_length, mel_bins
+                    ).astype(np.float32)
                     dummy_inputs["input_features"] = (input_features, input_features)
                 else:
                     input_desc = input_descs["input_values"]  # raw audio
                     sequence_length = self._get_max_sequence_length(input_desc, 50000)
-                    input_features = np.random.rand(batch_size, sequence_length).astype(np.float32) * 2.0 - 1.0
+                    input_features = (
+                        np.random.rand(batch_size, sequence_length).astype(np.float32)
+                        * 2.0
+                        - 1.0
+                    )
                     dummy_inputs["input_values"] = (input_features, input_features)
 
                 if "attention_mask" in input_descs:
-                    attention_mask = np.ones((batch_size, sequence_length), dtype=np.int64)
-                    dummy_inputs["attention_mask"] = (attention_mask, attention_mask.astype(np.int32))
+                    attention_mask = np.ones(
+                        (batch_size, sequence_length), dtype=np.int64
+                    )
+                    dummy_inputs["attention_mask"] = (
+                        attention_mask,
+                        attention_mask.astype(np.int32),
+                    )
 
             else:  # decoder
                 input_desc = input_descs["decoder_input_ids"]
                 sequence_length = 64
                 shape = (batch_size, sequence_length)
 
-                input_ids = np.random.randint(0, preprocessor.tokenizer.vocab_size, shape)
-                dummy_inputs["decoder_input_ids"] = (input_ids, input_ids.astype(np.int32))
+                input_ids = np.random.randint(
+                    0, preprocessor.tokenizer.vocab_size, shape
+                )
+                dummy_inputs["decoder_input_ids"] = (
+                    input_ids,
+                    input_ids.astype(np.int32),
+                )
 
                 if "decoder_attention_mask" in input_descs:
                     attention_mask = np.ones(shape, dtype=np.int64)
-                    dummy_inputs["decoder_attention_mask"] = (attention_mask, attention_mask.astype(np.int32))
+                    dummy_inputs["decoder_attention_mask"] = (
+                        attention_mask,
+                        attention_mask.astype(np.int32),
+                    )
 
                 if "encoder_outputs" in input_descs:
-                    last_hidden_state = np.zeros((batch_size, self._config.max_source_positions, self._config.hidden_size), dtype=np.float32)
-                    dummy_inputs["encoder_outputs"] = (last_hidden_state, last_hidden_state)
+                    last_hidden_state = np.zeros(
+                        (
+                            batch_size,
+                            self._config.max_source_positions,
+                            self._config.hidden_size,
+                        ),
+                        dtype=np.float32,
+                    )
+                    dummy_inputs["encoder_outputs"] = (
+                        last_hidden_state,
+                        last_hidden_state,
+                    )
 
                 if "attention_mask" in input_descs:
-                    encoder_attention_mask = np.ones((batch_size, self._config.max_source_positions), dtype=np.int64)
-                    dummy_inputs["attention_mask"] = (encoder_attention_mask, encoder_attention_mask.astype(np.int32))
+                    encoder_attention_mask = np.ones(
+                        (batch_size, self._config.max_source_positions), dtype=np.int64
+                    )
+                    dummy_inputs["attention_mask"] = (
+                        encoder_attention_mask,
+                        encoder_attention_mask.astype(np.int32),
+                    )
 
         else:
             raise ValueError(
@@ -961,18 +1088,25 @@ class CoreMLConfig():
 
             # Resize the attention mask to include the past
             if attention_mask_name in dummy_inputs:
-                attention_mask = np.ones((batch, sequence_length + past_key_values_length), dtype=np.int64)
-                dummy_inputs[attention_mask_name] = (attention_mask, attention_mask.astype(np.int32))
+                attention_mask = np.ones(
+                    (batch, sequence_length + past_key_values_length), dtype=np.int64
+                )
+                dummy_inputs[attention_mask_name] = (
+                    attention_mask,
+                    attention_mask.astype(np.int32),
+                )
 
             # TODO: Temporarily disabled until we can solve the issue with encoder past key/values
             # name = "decoder_past_key_values" if self.seq2seq == "decoder" else "past_key_values"
             name = "past_key_values"
             for i in range(self.num_layers):
                 dummy_inputs[f"{name}_{i}_key"] = (
-                    np.zeros(shape, dtype=np.float32), np.zeros(shape, dtype=np.float32)
+                    np.zeros(shape, dtype=np.float32),
+                    np.zeros(shape, dtype=np.float32),
                 )
                 dummy_inputs[f"{name}_{i}_value"] = (
-                    np.zeros(shape, dtype=np.float32), np.zeros(shape, dtype=np.float32)
+                    np.zeros(shape, dtype=np.float32),
+                    np.zeros(shape, dtype=np.float32),
                 )
 
             # TODO: Temporarily disabled until we can solve the issue with encoder past key/values
@@ -999,6 +1133,7 @@ class CoreMLConfig():
     def _convert_dummy_inputs_to_framework(self, dummy_inputs, framework):
         if framework == TensorType.PYTORCH and is_torch_available():
             import torch
+
             for key, (ref_value, coreml_value) in dummy_inputs.items():
                 if isinstance(ref_value, np.ndarray):
                     dummy_inputs[key] = (torch.tensor(ref_value), coreml_value)
@@ -1010,10 +1145,11 @@ class CoreMLConfig():
             if self.modality == "vision":
                 description = "Last layer hidden-state after a pooling operation on the spatial dimensions"
             else:
-                description = "Last layer hidden-state of the first token of the sequence"
+                description = (
+                    "Last layer hidden-state of the first token of the sequence"
+                )
 
             output_descs["pooler_output"] = OutputDescription(
-                "pooler_output",
-                description
+                "pooler_output", description
             )
         return output_descs

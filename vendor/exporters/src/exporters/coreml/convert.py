@@ -17,8 +17,9 @@ import json
 from typing import TYPE_CHECKING, List, Union, Mapping
 
 import coremltools as ct
-from coremltools.converters.mil.frontend.torch.torch_op_registry import _TORCH_OPS_REGISTRY
-from coremltools.models.neural_network import flexible_shape_utils
+from coremltools.converters.mil.frontend.torch.torch_op_registry import (
+    _TORCH_OPS_REGISTRY,
+)
 
 import numpy as np
 
@@ -80,7 +81,11 @@ def get_labels_as_list(model):
 
 def is_image_std_same(preprocessor: "FeatureExtractionMixin") -> bool:
     """Is the image_std normalization the same for all color channels?"""
-    return preprocessor.image_std[0] == preprocessor.image_std[1] == preprocessor.image_std[2]
+    return (
+        preprocessor.image_std[0]
+        == preprocessor.image_std[1]
+        == preprocessor.image_std[2]
+    )
 
 
 def get_shape(config, input_desc, dummy_input, axis=-1):
@@ -92,12 +97,12 @@ def get_shape(config, input_desc, dummy_input, axis=-1):
 
     # Does the input shape need to be flexible?
     if config.use_past or config.seq2seq:
-        #shape[0] = ct.RangeDim()  # batch size  #TODO
+        # shape[0] = ct.RangeDim()  # batch size  #TODO
         shape[axis] = ct.RangeDim()
         default_shape = None
     elif isinstance(input_desc.sequence_length, tuple):
         min_length, max_length = input_desc.sequence_length
-        #shape[0] = ct.RangeDim()  # batch size  #TODO
+        # shape[0] = ct.RangeDim()  # batch size  #TODO
         shape[axis] = ct.RangeDim(min_length, max_length)
         default_shape = None
 
@@ -105,7 +110,9 @@ def get_shape(config, input_desc, dummy_input, axis=-1):
 
 
 def get_input_types(
-    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin", "ProcessorMixin"],
+    preprocessor: Union[
+        "PreTrainedTokenizer", "FeatureExtractionMixin", "ProcessorMixin"
+    ],
     config: CoreMLConfig,
     dummy_inputs: Mapping[str, np.ndarray],
 ) -> List[Union[ct.ImageType, ct.TensorType]]:
@@ -160,10 +167,12 @@ def get_input_types(
         if "encoder_outputs" in input_descs:
             input_desc = input_descs["encoder_outputs"]
             shape = list(dummy_inputs["encoder_outputs"][0].shape)
-            #shape[0] = ct.RangeDim()  # batch size  #TODO
+            # shape[0] = ct.RangeDim()  # batch size  #TODO
             shape[1] = ct.RangeDim()
             input_types.append(
-                ct.TensorType(name=input_desc.name, shape=ct.Shape(shape), dtype=np.float32)
+                ct.TensorType(
+                    name=input_desc.name, shape=ct.Shape(shape), dtype=np.float32
+                )
             )
 
         if config.seq2seq == "decoder" and "attention_mask" in input_descs:
@@ -181,7 +190,9 @@ def get_input_types(
                 ct.TensorType(name=input_desc.name, shape=shape, dtype=np.int32)
             )
             input_desc = input_descs["decoder_attention_mask"]
-            shape = get_shape(config, input_desc, dummy_inputs["decoder_attention_mask"])
+            shape = get_shape(
+                config, input_desc, dummy_inputs["decoder_attention_mask"]
+            )
             input_types.append(
                 ct.TensorType(name=input_desc.name, shape=shape, dtype=np.int32)
             )
@@ -191,7 +202,7 @@ def get_input_types(
             # name = "decoder_past_key_values" if config.seq2seq == "decoder" else "past_key_values"
             name = "past_key_values"
             shape = list(dummy_inputs[f"{name}_0_key"][1].shape)
-            #shape[0] = ct.RangeDim()  # batch size  #TODO
+            # shape[0] = ct.RangeDim()  # batch size  #TODO
             shape[2] = ct.RangeDim(0, -1)
             shape = ct.Shape(shape)
 
@@ -210,7 +221,6 @@ def get_input_types(
             #     for i in range(config.num_encoder_layers):
             #         input_types.append(ct.TensorType(name=f"{name}_{i}_key", shape=shape))
             #         input_types.append(ct.TensorType(name=f"{name}_{i}_value", shape=shape))
-
 
     elif config.modality == "vision":
         if hasattr(preprocessor, "image_mean"):
@@ -250,7 +260,7 @@ def get_input_types(
                 ct.TensorType(
                     name=input_desc.name,
                     shape=dummy_inputs["bool_masked_pos"][0].shape,
-                    dtype=np.int32
+                    dtype=np.int32,
                 )
             )
 
@@ -274,11 +284,13 @@ def get_input_types(
             input_desc = input_descs["attention_mask"]
             attn_shape = list(dummy_inputs["attention_mask"][0].shape)
             if isinstance(shape.shape[1], ct.RangeDim):
-                #attn_shape[0] = shape.shape[0]  # batch size  #TODO
+                # attn_shape[0] = shape.shape[0]  # batch size  #TODO
                 attn_shape[-1] = shape.shape[1]
 
             input_types.append(
-                ct.TensorType(name=input_desc.name, shape=ct.Shape(attn_shape), dtype=np.int32)
+                ct.TensorType(
+                    name=input_desc.name, shape=ct.Shape(attn_shape), dtype=np.int32
+                )
             )
         else:
             logger.info("Skipping attention_mask input")
@@ -302,17 +314,20 @@ if is_torch_available():
 
             # Core ML's image preprocessing does not allow a different scaling
             # factor for each color channel, so do this manually.
-            if hasattr(self.preprocessor, "image_std") and not is_image_std_same(self.preprocessor):
-                image_std = torch.tensor(self.preprocessor.image_std).reshape(1, -1, 1, 1)
+            if hasattr(self.preprocessor, "image_std") and not is_image_std_same(
+                self.preprocessor
+            ):
+                image_std = torch.tensor(self.preprocessor.image_std).reshape(
+                    1, -1, 1, 1
+                )
                 inputs = inputs / image_std
 
             model_kwargs = {
                 "return_dict": False,
-
                 # CoreMLConfig's values_override is supposed to do this, but not all
                 # models look at self.config.use_cache (e.g. ElectraForCausalLM)
                 # Can't do it here either because it doesn't work with all models!
-                #"use_cache": self.config.use_past or self.config.seq2seq,
+                # "use_cache": self.config.use_past or self.config.seq2seq,
             }
 
             # Convert the past_key_values_x_key and _value inputs back into tuples,
@@ -329,21 +344,27 @@ if is_torch_available():
                     remaining -= (num_decoder_layers + num_encoder_layers) * 2
                     past_key_values = []
                     for i in range(min(num_decoder_layers, num_encoder_layers)):
-                        past_key_values.append((
-                            all_inputs[remaining + i*2],
-                            all_inputs[remaining + i*2 + 1],
-                            all_inputs[remaining + num_decoder_layers*2 + i*2],
-                            all_inputs[remaining + num_decoder_layers*2 + i*2 + 1],
-                        ))
+                        past_key_values.append(
+                            (
+                                all_inputs[remaining + i * 2],
+                                all_inputs[remaining + i * 2 + 1],
+                                all_inputs[remaining + num_decoder_layers * 2 + i * 2],
+                                all_inputs[
+                                    remaining + num_decoder_layers * 2 + i * 2 + 1
+                                ],
+                            )
+                        )
                     model_kwargs["past_key_values"] = past_key_values
                 else:
                     remaining -= self.config.num_layers * 2
                     past_key_values = []
                     for i in range(self.config.num_layers):
-                        past_key_values.append((
-                            all_inputs[remaining + i*2],
-                            all_inputs[remaining + i*2 + 1],
-                        ))
+                        past_key_values.append(
+                            (
+                                all_inputs[remaining + i * 2],
+                                all_inputs[remaining + i * 2 + 1],
+                            )
+                        )
                     model_kwargs["past_key_values"] = past_key_values
 
             if self.config.seq2seq == "decoder":
@@ -388,8 +409,12 @@ if is_torch_available():
                     encoder_presents = ()
                     for i in range(len(past_key_values)):
                         for j in range(2):
-                            decoder_presents = decoder_presents + (past_key_values[i][j],)
-                            encoder_presents = encoder_presents + (past_key_values[i][j + 2],)
+                            decoder_presents = decoder_presents + (
+                                past_key_values[i][j],
+                            )
+                            encoder_presents = encoder_presents + (
+                                past_key_values[i][j + 2],
+                            )
 
                     presents = decoder_presents + encoder_presents
                 else:
@@ -446,14 +471,19 @@ if is_torch_available():
                 x = outputs[0]  # logits
                 output_desc = output_descs["logits"]
                 if output_desc.do_upsample:
-                    x = torch.nn.functional.interpolate(x, size=inputs.shape[-2:], mode="bilinear", align_corners=False)
+                    x = torch.nn.functional.interpolate(
+                        x, size=inputs.shape[-2:], mode="bilinear", align_corners=False
+                    )
                 if output_desc.do_softmax:
                     x = torch.nn.functional.softmax(x, dim=1)
                 if output_desc.do_argmax:
                     x = x.argmax(1)
                 return x
 
-            if self.config.seq2seq == "encoder" and self.config.task in ["text2text-generation", "speech-seq2seq"]:
+            if self.config.seq2seq == "encoder" and self.config.task in [
+                "text2text-generation",
+                "speech-seq2seq",
+            ]:
                 return outputs[0]  # last_hidden_state
 
             if self.config.task == "feature-extraction":
@@ -464,11 +494,15 @@ if is_torch_available():
                 else:
                     return outputs[0]  # last_hidden_state
 
-            raise AssertionError(f"Cannot compute outputs for unknown task '{self.config.task}'")
+            raise AssertionError(
+                f"Cannot compute outputs for unknown task '{self.config.task}'"
+            )
 
 
 def export_pytorch(
-    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin", "ProcessorMixin"],
+    preprocessor: Union[
+        "PreTrainedTokenizer", "FeatureExtractionMixin", "ProcessorMixin"
+    ],
     model: "PreTrainedModel",
     config: CoreMLConfig,
     quantize: str = "float32",
@@ -500,12 +534,17 @@ def export_pytorch(
     # Check if we need to override certain configuration items
     if config.values_override is not None:
         logger.info(f"Overriding {len(config.values_override)} configuration item(s)")
-        for override_config_key, override_config_value in config.values_override.items():
+        for (
+            override_config_key,
+            override_config_value,
+        ) in config.values_override.items():
             logger.info(f"\t- {override_config_key} -> {override_config_value}")
             setattr(model.config, override_config_key, override_config_value)
 
     # Create dummy input data for doing the JIT trace.
-    dummy_inputs = config.generate_dummy_inputs(preprocessor, framework=TensorType.PYTORCH)
+    dummy_inputs = config.generate_dummy_inputs(
+        preprocessor, framework=TensorType.PYTORCH
+    )
 
     # Put the inputs in the order from the config.
     example_input = [dummy_inputs[key][0] for key in list(config.inputs.keys())]
@@ -516,7 +555,7 @@ def export_pytorch(
     # that happens with certain models such as LeViT. The error message is: "Cannot insert
     # a Tensor that requires grad as a constant."
     with torch.no_grad():
-        dummy_output = wrapper(*example_input)
+        wrapper(*example_input)
 
     traced_model = torch.jit.trace(wrapper, example_input, strict=True)
 
@@ -531,12 +570,16 @@ def export_pytorch(
 
     convert_kwargs = {}
     if not config.use_legacy_format:
-        convert_kwargs["compute_precision"] = ct.precision.FLOAT16 if quantize == "float16" else ct.precision.FLOAT32
+        convert_kwargs["compute_precision"] = (
+            ct.precision.FLOAT16 if quantize == "float16" else ct.precision.FLOAT32
+        )
 
     # For classification models, add the labels into the Core ML model and
     # designate it as the special "classifier" model type.
     if config.is_classifier:
-        convert_kwargs['classifier_config'] = ct.ClassifierConfig(config.get_class_labels())
+        convert_kwargs["classifier_config"] = ct.ClassifierConfig(
+            config.get_class_labels()
+        )
 
     input_tensors = get_input_types(preprocessor, config, dummy_inputs)
 
@@ -569,7 +612,7 @@ def export_pytorch(
     input_descs = config.inputs
     output_descs = config.outputs
 
-    for (i, input_desc) in enumerate(input_descs.values()):
+    for i, input_desc in enumerate(input_descs.values()):
         mlmodel.input_description[input_desc.name] = input_desc.description
 
         if input_desc.is_optional:
@@ -577,33 +620,49 @@ def export_pytorch(
 
     user_defined_metadata = {}
     if model.config.transformers_version:
-        user_defined_metadata["transformers_version"] = model.config.transformers_version
+        user_defined_metadata[
+            "transformers_version"
+        ] = model.config.transformers_version
 
     if config.is_classifier:
         output_desc = output_descs["logits"]
-        ct.utils.rename_feature(spec, spec.description.predictedProbabilitiesName, output_desc.name)
+        ct.utils.rename_feature(
+            spec, spec.description.predictedProbabilitiesName, output_desc.name
+        )
         spec.description.predictedProbabilitiesName = output_desc.name
         mlmodel.output_description[output_desc.name] = output_desc.description
 
         output_desc = output_descs["class_labels"]
-        ct.utils.rename_feature(spec, spec.description.predictedFeatureName, output_desc.name)
+        ct.utils.rename_feature(
+            spec, spec.description.predictedFeatureName, output_desc.name
+        )
         spec.description.predictedFeatureName = output_desc.name
         mlmodel.output_description[output_desc.name] = output_desc.description
     else:
         for i, (key, output_desc) in enumerate(output_descs.items()):
             if i < len(example_output):
                 output = spec.description.output[i]
-                ct.utils.rename_feature(spec, output.name, output_desc.name, rename_inputs=False)
+                ct.utils.rename_feature(
+                    spec, output.name, output_desc.name, rename_inputs=False
+                )
                 mlmodel.output_description[output_desc.name] = output_desc.description
 
-        if config.task in ["object-detection", "semantic-segmentation", "token-classification"]:
+        if config.task in [
+            "object-detection",
+            "semantic-segmentation",
+            "token-classification",
+        ]:
             labels = get_labels_as_list(model)
             user_defined_metadata["classes"] = ",".join(labels)
 
         if config.task == "semantic-segmentation":
             # Make the model available in Xcode's previewer.
-            mlmodel.user_defined_metadata["com.apple.coreml.model.preview.type"] = "imageSegmenter"
-            mlmodel.user_defined_metadata["com.apple.coreml.model.preview.params"] = json.dumps({"labels": labels})
+            mlmodel.user_defined_metadata[
+                "com.apple.coreml.model.preview.type"
+            ] = "imageSegmenter"
+            mlmodel.user_defined_metadata[
+                "com.apple.coreml.model.preview.params"
+            ] = json.dumps({"labels": labels})
 
     if len(user_defined_metadata) > 0:
         spec.description.metadata.userDefined.update(user_defined_metadata)
@@ -612,13 +671,17 @@ def export_pytorch(
     mlmodel = ct.models.MLModel(mlmodel._spec, weights_dir=mlmodel.weights_dir)
 
     if config.use_legacy_format and quantize == "float16":
-        mlmodel = ct.models.neural_network.quantization_utils.quantize_weights(mlmodel, nbits=16)
+        mlmodel = ct.models.neural_network.quantization_utils.quantize_weights(
+            mlmodel, nbits=16
+        )
 
     return mlmodel
 
 
 def export_tensorflow(
-    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin", "ProcessorMixin"],
+    preprocessor: Union[
+        "PreTrainedTokenizer", "FeatureExtractionMixin", "ProcessorMixin"
+    ],
     model: "TFPreTrainedModel",
     config: CoreMLConfig,
     quantize: str = "float32",
@@ -646,7 +709,9 @@ def export_tensorflow(
 
 
 def export(
-    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin", "ProcessorMixin"],
+    preprocessor: Union[
+        "PreTrainedTokenizer", "FeatureExtractionMixin", "ProcessorMixin"
+    ],
     model: Union["PreTrainedModel", "TFPreTrainedModel"],
     config: CoreMLConfig,
     quantize: str = "float32",

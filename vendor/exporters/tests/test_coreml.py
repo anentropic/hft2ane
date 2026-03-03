@@ -40,7 +40,7 @@ class TextCoreMLConfig(CoreMLConfig):
 class CoreMLConfigTestCase(TestCase):
     def test_unknown_modality(self):
         with pytest.raises(ValueError):
-            config = CoreMLConfig(None, task="feature-extraction")
+            CoreMLConfig(None, task="feature-extraction")
 
     def test_unknown_task(self):
         with pytest.raises(AssertionError):
@@ -83,7 +83,7 @@ PYTORCH_EXPORT_MODELS = {
 
 PYTORCH_EXPORT_WITH_PAST_MODELS = {
     ("ctrl", "sshleifer/tiny-ctrl"),
-    #TODO ("gpt2", "distilgpt2"),
+    # TODO ("gpt2", "distilgpt2"),
 }
 
 PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {}
@@ -102,13 +102,28 @@ def _get_models_to_test(export_models_list):
         for name, model, *features in export_models_list:
             if features:
                 feature_config_mapping = {
-                    feature: FeaturesManager.get_config(name, feature) for _ in features for feature in _
+                    feature: FeaturesManager.get_config(name, feature)
+                    for _ in features
+                    for feature in _
                 }
             else:
-                feature_config_mapping = FeaturesManager.get_supported_features_for_model_type(name)
+                feature_config_mapping = (
+                    FeaturesManager.get_supported_features_for_model_type(name)
+                )
 
-            for feature, coreml_config_class_constructor in feature_config_mapping.items():
-                models_to_test.append((f"{name}_{feature}", name, model, feature, coreml_config_class_constructor))
+            for (
+                feature,
+                coreml_config_class_constructor,
+            ) in feature_config_mapping.items():
+                models_to_test.append(
+                    (
+                        f"{name}_{feature}",
+                        name,
+                        model,
+                        feature,
+                        coreml_config_class_constructor,
+                    )
+                )
         return sorted(models_to_test)
     else:
         # Returning some dummy test that should not be ever called because of the @require_torch / @require_tf
@@ -124,7 +139,9 @@ class CoreMLExportTestCase(TestCase):
     Integration tests ensuring supported models are correctly exported
     """
 
-    def _coreml_export(self, test_name, name, model_name, feature, coreml_config_class_constructor):
+    def _coreml_export(
+        self, test_name, name, model_name, feature, coreml_config_class_constructor
+    ):
         model_class = FeaturesManager.get_model_class_for_feature(feature)
         config = AutoConfig.from_pretrained(model_name)
         model = model_class.from_config(config)
@@ -184,40 +201,71 @@ class CoreMLExportTestCase(TestCase):
     @slow
     @require_torch
     @require_vision
-    def test_pytorch_export(self, test_name, name, model_name, feature, coreml_config_class_constructor):
-        self._coreml_export(test_name, name, model_name, feature, coreml_config_class_constructor)
+    def test_pytorch_export(
+        self, test_name, name, model_name, feature, coreml_config_class_constructor
+    ):
+        self._coreml_export(
+            test_name, name, model_name, feature, coreml_config_class_constructor
+        )
 
-    @parameterized.expand(_get_models_to_test(PYTORCH_EXPORT_WITH_PAST_MODELS), skip_on_empty=True)
+    @parameterized.expand(
+        _get_models_to_test(PYTORCH_EXPORT_WITH_PAST_MODELS), skip_on_empty=True
+    )
     @slow
     @require_torch
-    def test_pytorch_export_with_past(self, test_name, name, model_name, feature, coreml_config_class_constructor):
-        self._coreml_export(test_name, name, model_name, feature, coreml_config_class_constructor)
+    def test_pytorch_export_with_past(
+        self, test_name, name, model_name, feature, coreml_config_class_constructor
+    ):
+        self._coreml_export(
+            test_name, name, model_name, feature, coreml_config_class_constructor
+        )
 
-    @parameterized.expand(_get_models_to_test(PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS), skip_on_empty=True)
+    @parameterized.expand(
+        _get_models_to_test(PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS), skip_on_empty=True
+    )
     @slow
     @require_torch
     def test_pytorch_export_seq2seq_with_past(
         self, test_name, name, model_name, feature, coreml_config_class_constructor
     ):
-        self._coreml_export(test_name, name, model_name, feature, coreml_config_class_constructor)
+        self._coreml_export(
+            test_name, name, model_name, feature, coreml_config_class_constructor
+        )
 
-    @parameterized.expand(_get_models_to_test(TENSORFLOW_EXPORT_DEFAULT_MODELS), skip_on_empty=True)
+    @parameterized.expand(
+        _get_models_to_test(TENSORFLOW_EXPORT_DEFAULT_MODELS), skip_on_empty=True
+    )
     @slow
     @require_tf
     @require_vision
-    def test_tensorflow_export(self, test_name, name, model_name, feature, coreml_config_class_constructor):
-        self._coreml_export(test_name, name, model_name, feature, coreml_config_class_constructor)
+    def test_tensorflow_export(
+        self, test_name, name, model_name, feature, coreml_config_class_constructor
+    ):
+        self._coreml_export(
+            test_name, name, model_name, feature, coreml_config_class_constructor
+        )
 
-    @parameterized.expand(_get_models_to_test(TENSORFLOW_EXPORT_WITH_PAST_MODELS), skip_on_empty=True)
+    @parameterized.expand(
+        _get_models_to_test(TENSORFLOW_EXPORT_WITH_PAST_MODELS), skip_on_empty=True
+    )
     @slow
     @require_tf
-    def test_tensorflow_export_with_past(self, test_name, name, model_name, feature, coreml_config_class_constructor):
-        self._coreml_export(test_name, name, model_name, feature, coreml_config_class_constructor)
+    def test_tensorflow_export_with_past(
+        self, test_name, name, model_name, feature, coreml_config_class_constructor
+    ):
+        self._coreml_export(
+            test_name, name, model_name, feature, coreml_config_class_constructor
+        )
 
-    @parameterized.expand(_get_models_to_test(TENSORFLOW_EXPORT_SEQ2SEQ_WITH_PAST_MODELS), skip_on_empty=True)
+    @parameterized.expand(
+        _get_models_to_test(TENSORFLOW_EXPORT_SEQ2SEQ_WITH_PAST_MODELS),
+        skip_on_empty=True,
+    )
     @slow
     @require_tf
     def test_tensorflow_export_seq2seq_with_past(
         self, test_name, name, model_name, feature, coreml_config_class_constructor
     ):
-        self._coreml_export(test_name, name, model_name, feature, coreml_config_class_constructor)
+        self._coreml_export(
+            test_name, name, model_name, feature, coreml_config_class_constructor
+        )

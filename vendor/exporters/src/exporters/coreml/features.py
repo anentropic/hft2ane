@@ -47,16 +47,7 @@ if is_torch_available():
         AutoModelForTokenClassification,
     )
 if is_tf_available():
-    from transformers.models.auto import (
-        TFAutoModel,
-        # TFAutoModelForCausalLM,
-        # TFAutoModelForMaskedLM,
-        # TFAutoModelForMultipleChoice,
-        # TFAutoModelForQuestionAnswering,
-        # TFAutoModelForSeq2SeqLM,
-        # TFAutoModelForSequenceClassification,
-        # TFAutoModelForTokenClassification,
-    )
+    pass
 if not is_torch_available() and not is_tf_available():
     logger.warning(
         "The Core ML export features are only supported for PyTorch or TensorFlow. You will not be able to export models"
@@ -81,9 +72,11 @@ def supported_features_mapping(
         raise ValueError("A CoreMLConfig class must be provided")
 
     import exporters.coreml.models
+
     config_cls = exporters.coreml
     for attr_name in coreml_config_cls.split("."):
-        if not hasattr(config_cls, attr_name): continue  # hack!
+        if not hasattr(config_cls, attr_name):
+            continue  # hack!
         config_cls = getattr(config_cls, attr_name)
     mapping = {}
     for feature in supported_features:
@@ -158,7 +151,7 @@ class FeaturesManager:
             "feature-extraction",
             "image-classification",
             "semantic-segmentation",
-            coreml_config_cls="models.beit.BeitCoreMLConfig"
+            coreml_config_cls="models.beit.BeitCoreMLConfig",
         ),
         "bert": supported_features_mapping(
             "feature-extraction",
@@ -238,9 +231,9 @@ class FeaturesManager:
         ),
         "gpt2": supported_features_mapping(
             "feature-extraction",
-            #"feature-extraction-with-past",
+            # "feature-extraction-with-past",
             "text-generation",
-            #"text-generation-with-past",
+            # "text-generation-with-past",
             "text-classification",
             "token-classification",
             coreml_config_cls="models.gpt2.GPT2CoreMLConfig",
@@ -252,22 +245,24 @@ class FeaturesManager:
         ),
         "gpt_neo": supported_features_mapping(
             "feature-extraction",
-            #"feature-extraction-with-past",
+            # "feature-extraction-with-past",
             "text-generation",
-            #"text-generation-with-past",
+            # "text-generation-with-past",
             "text-classification",
             coreml_config_cls="models.gpt_neo.GPTNeoCoreMLConfig",
         ),
         "gpt_neox": supported_features_mapping(
             "feature-extraction",
-            #"feature-extraction-with-past",
+            # "feature-extraction-with-past",
             "text-generation",
-            #"text-generation-with-past",
+            # "text-generation-with-past",
             "text-classification",
             coreml_config_cls="models.gpt_neox.GPTNeoXCoreMLConfig",
         ),
         "levit": supported_features_mapping(
-            "feature-extraction", "image-classification", coreml_config_cls="models.levit.LevitCoreMLConfig"
+            "feature-extraction",
+            "image-classification",
+            coreml_config_cls="models.levit.LevitCoreMLConfig",
         ),
         "m2m_100": supported_features_mapping(
             "feature-extraction",
@@ -311,6 +306,12 @@ class FeaturesManager:
             coreml_config_cls="models.plbart.PLBartCoreMLConfig",
         ),
         "roberta": supported_features_mapping(
+            "feature-extraction",
+            "fill-mask",
+            "multiple-choice",
+            "question-answering",
+            "text-classification",
+            "token-classification",
             "text-generation",
             "text-generation-with-past",
             coreml_config_cls="models.roberta.RobertaCoreMLConfig",
@@ -346,7 +347,10 @@ class FeaturesManager:
             coreml_config_cls="models.t5.T5CoreMLConfig",
         ),
         "vit": supported_features_mapping(
-            "feature-extraction", "image-classification", "masked-im", coreml_config_cls="models.vit.ViTCoreMLConfig"
+            "feature-extraction",
+            "image-classification",
+            "masked-im",
+            coreml_config_cls="models.vit.ViTCoreMLConfig",
         ),
         "yolos": supported_features_mapping(
             "feature-extraction",
@@ -355,12 +359,18 @@ class FeaturesManager:
         ),
     }
 
-    AVAILABLE_FEATURES = sorted(reduce(lambda s1, s2: s1 | s2, (v.keys() for v in _SUPPORTED_MODEL_TYPE.values())))
-    AVAILABLE_FEATURES_INCLUDING_LEGACY = AVAILABLE_FEATURES + list(_SYNONYM_TASK_MAP.keys())
+    AVAILABLE_FEATURES = sorted(
+        reduce(
+            lambda s1, s2: s1 | s2, (v.keys() for v in _SUPPORTED_MODEL_TYPE.values())
+        )
+    )
+    AVAILABLE_FEATURES_INCLUDING_LEGACY = AVAILABLE_FEATURES + list(
+        _SYNONYM_TASK_MAP.keys()
+    )
 
-    @staticmethod
+    @classmethod
     def get_supported_features_for_model_type(
-        model_type: str, model_name: Optional[str] = None
+        cls, model_type: str, model_name: Optional[str] = None
     ) -> Dict[str, Callable[[PretrainedConfig], CoreMLConfig]]:
         """
         Tries to retrieve the feature -> CoreMLConfig constructor map from the model type.
@@ -375,23 +385,25 @@ class FeaturesManager:
             The dictionary mapping each feature to a corresponding CoreMLConfig constructor.
         """
         model_type = model_type.lower()
-        if model_type not in FeaturesManager._SUPPORTED_MODEL_TYPE:
-            model_type_and_model_name = f"{model_type} ({model_name})" if model_name else model_type
+        if model_type not in cls._SUPPORTED_MODEL_TYPE:
+            model_type_and_model_name = (
+                f"{model_type} ({model_name})" if model_name else model_type
+            )
             raise KeyError(
                 f"{model_type_and_model_name} is not supported yet. "
-                f"Only {list(FeaturesManager._SUPPORTED_MODEL_TYPE.keys())} are supported. "
+                f"Only {list(cls._SUPPORTED_MODEL_TYPE.keys())} are supported. "
                 f"If you want to support {model_type} please propose a PR or open up an issue."
             )
-        return FeaturesManager._SUPPORTED_MODEL_TYPE[model_type]
+        return cls._SUPPORTED_MODEL_TYPE[model_type]
 
     @staticmethod
     def feature_to_task(feature: str) -> str:
         return feature.replace("-with-past", "")
 
-    @staticmethod
-    def map_from_synonym(feature: str) -> str:
-        if feature in FeaturesManager._SYNONYM_TASK_MAP:
-            feature = FeaturesManager._SYNONYM_TASK_MAP[feature]
+    @classmethod
+    def map_from_synonym(cls, feature: str) -> str:
+        if feature in cls._SYNONYM_TASK_MAP:
+            feature = cls._SYNONYM_TASK_MAP[feature]
         return feature
 
     @staticmethod
@@ -405,12 +417,16 @@ class FeaturesManager:
                 f"Only two frameworks are supported for Core ML export: pt or tf, but {framework} was provided."
             )
         elif framework == "pt" and not is_torch_available():
-            raise RuntimeError("Cannot export model to Core ML using PyTorch because no PyTorch package was found.")
+            raise RuntimeError(
+                "Cannot export model to Core ML using PyTorch because no PyTorch package was found."
+            )
         elif framework == "tf" and not is_tf_available():
-            raise RuntimeError("Cannot export model to Core ML using TensorFlow because no TensorFlow package was found.")
+            raise RuntimeError(
+                "Cannot export model to Core ML using TensorFlow because no TensorFlow package was found."
+            )
 
-    @staticmethod
-    def get_model_class_for_feature(feature: str, framework: str = "pt") -> Type:
+    @classmethod
+    def get_model_class_for_feature(cls, feature: str, framework: str = "pt") -> Type:
         """
         Attempts to retrieve an AutoModel class from a feature name.
 
@@ -423,21 +439,21 @@ class FeaturesManager:
         Returns:
             The AutoModel class corresponding to the feature.
         """
-        task = FeaturesManager.feature_to_task(feature)
-        FeaturesManager._validate_framework_choice(framework)
+        task = cls.feature_to_task(feature)
+        cls._validate_framework_choice(framework)
         if framework == "pt":
-            task_to_automodel = FeaturesManager._TASKS_TO_AUTOMODELS
+            task_to_automodel = cls._TASKS_TO_AUTOMODELS
         else:
-            task_to_automodel = FeaturesManager._TASKS_TO_TF_AUTOMODELS
+            task_to_automodel = cls._TASKS_TO_TF_AUTOMODELS
         if task not in task_to_automodel:
             raise KeyError(
-                f"Unknown task: {feature}. Possible values are {list(FeaturesManager._TASKS_TO_AUTOMODELS.values())}"
+                f"Unknown task: {feature}. Possible values are {list(cls._TASKS_TO_AUTOMODELS.values())}"
             )
         return task_to_automodel[task]
 
-    @staticmethod
+    @classmethod
     def get_model_from_feature(
-        feature: str, model: str, framework: str = "pt", cache_dir: str = None
+        cls, feature: str, model: str, framework: str = "pt", cache_dir: str = None
     ) -> Union["PreTrainedModel", "TFPreTrainedModel"]:
         """
         Attempts to retrieve a model from a model's name and the feature to be enabled.
@@ -454,19 +470,27 @@ class FeaturesManager:
             The instance of the model.
 
         """
-        model_class = FeaturesManager.get_model_class_for_feature(feature, framework)
+        model_class = cls.get_model_class_for_feature(feature, framework)
         try:
-            model = model_class.from_pretrained(model, cache_dir=cache_dir, torchscript=True, trust_remote_code=True)
+            model = model_class.from_pretrained(
+                model, cache_dir=cache_dir, torchscript=True, trust_remote_code=True
+            )
         except OSError:
             if framework == "pt":
-                model = model_class.from_pretrained(model, from_tf=True, cache_dir=cache_dir)
+                model = model_class.from_pretrained(
+                    model, from_tf=True, cache_dir=cache_dir
+                )
             else:
-                model = model_class.from_pretrained(model, from_pt=True, cache_dir=cache_dir, torchscript=True)
+                model = model_class.from_pretrained(
+                    model, from_pt=True, cache_dir=cache_dir, torchscript=True
+                )
         return model
 
-    @staticmethod
+    @classmethod
     def check_supported_model_or_raise(
-        model: Union["PreTrainedModel", "TFPreTrainedModel"], feature: str = "feature-extraction"
+        cls,
+        model: Union["PreTrainedModel", "TFPreTrainedModel"],
+        feature: str = "feature-extraction",
     ) -> Tuple[str, Callable]:
         """
         Check whether or not the model has the requested features.
@@ -481,16 +505,18 @@ class FeaturesManager:
         """
         model_type = model.config.model_type.replace("-", "_")
         model_name = getattr(model, "name", "")
-        model_features = FeaturesManager.get_supported_features_for_model_type(model_type, model_name=model_name)
+        model_features = cls.get_supported_features_for_model_type(
+            model_type, model_name=model_name
+        )
         if feature not in model_features:
             raise ValueError(
                 f"{model.config.model_type} doesn't support feature {feature}. Supported values are: {model_features}"
             )
 
-        return model.config.model_type, FeaturesManager._SUPPORTED_MODEL_TYPE[model_type][feature]
+        return model.config.model_type, cls._SUPPORTED_MODEL_TYPE[model_type][feature]
 
-    @staticmethod
-    def get_config(model_type: str, feature: str) -> CoreMLConfig:
+    @classmethod
+    def get_config(cls, model_type: str, feature: str) -> CoreMLConfig:
         """
         Gets the `CoreMLConfig` for a model_type and feature combination.
 
@@ -503,4 +529,4 @@ class FeaturesManager:
         Returns:
             `CoreMLConfig`: config for the combination
         """
-        return FeaturesManager._SUPPORTED_MODEL_TYPE[model_type][feature]
+        return cls._SUPPORTED_MODEL_TYPE[model_type][feature]

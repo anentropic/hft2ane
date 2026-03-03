@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Tuple, Union
+from typing import Union
 
 import coremltools as ct
 import numpy as np
@@ -36,7 +36,9 @@ def softmax(x, axis=-1):
 
 def validate_model_outputs(
     config: CoreMLConfig,
-    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin", "ProcessorMixin"],
+    preprocessor: Union[
+        "PreTrainedTokenizer", "FeatureExtractionMixin", "ProcessorMixin"
+    ],
     reference_model: Union["PreTrainedModel", "TFPreTrainedModel"],
     mlmodel: ct.models.MLModel,
     atol: float,
@@ -101,8 +103,12 @@ def validate_model_outputs(
     # how the Core ML mdel does it.
     if "past_key_values" in ref_outputs_dict:
         for i in range(len(ref_outputs_dict["past_key_values"])):
-            ref_outputs_dict[f"present_{i}_key"] = ref_outputs_dict["past_key_values"][i][0]
-            ref_outputs_dict[f"present_{i}_value"] = ref_outputs_dict["past_key_values"][i][1]
+            ref_outputs_dict[f"present_{i}_key"] = ref_outputs_dict["past_key_values"][
+                i
+            ][0]
+            ref_outputs_dict[f"present_{i}_value"] = ref_outputs_dict[
+                "past_key_values"
+            ][i][1]
 
     # Compute outputs from the Core ML model
     coreml_outputs = mlmodel.predict(coreml_inputs)
@@ -130,13 +136,17 @@ def validate_model_outputs(
 
         ref_value = reference_model.config.id2label[np.argmax(ref_logits, axis=-1)[0]]
         if coreml_value != ref_value:
-            logger.info(f"\t\t-[x] predicted class '{coreml_value}' doesn't match '{ref_value}'")
+            logger.info(
+                f"\t\t-[x] predicted class '{coreml_value}' doesn't match '{ref_value}'"
+            )
             raise ValueError(
                 "Predicted class doesn't match between reference model and Core ML exported model: "
                 f"Got {ref_value} (reference) and {coreml_value} (Core ML)"
             )
         else:
-            logger.info(f"\t\t-[✓] predicted class '{coreml_value}' matches '{ref_value}'")
+            logger.info(
+                f"\t\t-[✓] predicted class '{coreml_value}' matches '{ref_value}'"
+            )
 
         probs_name = spec.description.predictedProbabilitiesName
         coreml_value = coreml_outputs[probs_name]
@@ -144,13 +154,17 @@ def validate_model_outputs(
 
         # Shape
         if len(coreml_value) != len(ref_value):
-            logger.info(f"\t\t-[x] number of classes {len(coreml_value)} doesn't match {len(ref_value)}")
+            logger.info(
+                f"\t\t-[x] number of classes {len(coreml_value)} doesn't match {len(ref_value)}"
+            )
             raise ValueError(
                 "Output shape doesn't match between reference model and Core ML exported model: "
                 f"Got {len(ref_value)} (reference) and {len(coreml_value)} (Core ML)"
             )
         else:
-            logger.info(f"\t\t-[✓] number of classes {len(coreml_value)} matches {len(ref_value)}")
+            logger.info(
+                f"\t\t-[✓] number of classes {len(coreml_value)} matches {len(ref_value)}"
+            )
 
         # Core ML probabilities are in a dict, put in sorted list for comparing
         class_labels = config.get_class_labels()
@@ -182,7 +196,9 @@ def validate_model_outputs(
             f"{coreml_outputs_set.difference(ref_outputs_set)}"
         )
     else:
-        logger.info(f"\t-[✓] Core ML model output names match reference model ({coreml_outputs_set})")
+        logger.info(
+            f"\t-[✓] Core ML model output names match reference model ({coreml_outputs_set})"
+        )
 
     # Check the shape and values match
     for name in coreml_output_internal_names:
@@ -202,11 +218,17 @@ def validate_model_outputs(
 
         # Shape
         if not coreml_value.shape == ref_value.shape:
-            if config.task == "semantic-segmentation" and (output_descs[name].do_upsample or output_descs[name].do_argmax):
-                logger.info("\t\t-[ ] cannot compare outputs because of do_upsample or do_argmax options")
+            if config.task == "semantic-segmentation" and (
+                output_descs[name].do_upsample or output_descs[name].do_argmax
+            ):
+                logger.info(
+                    "\t\t-[ ] cannot compare outputs because of do_upsample or do_argmax options"
+                )
                 continue
             else:
-                logger.info(f"\t\t-[x] shape {coreml_value.shape} doesn't match {ref_value.shape}")
+                logger.info(
+                    f"\t\t-[x] shape {coreml_value.shape} doesn't match {ref_value.shape}"
+                )
                 raise ValueError(
                     "Output shape doesn't match between reference model and Core ML exported model: "
                     f"Got {ref_value.shape} (reference) and {coreml_value.shape} (Core ML)"

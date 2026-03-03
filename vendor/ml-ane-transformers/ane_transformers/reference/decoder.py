@@ -16,11 +16,9 @@ from .layer_norm import LayerNormANE
 
 
 class TransformerDecoder(nn.Module):
-
     def __init__(self, layer, num_layers):
         super().__init__()
-        self.layers = nn.ModuleList(
-            [copy.deepcopy(layer) for i in range(num_layers)])
+        self.layers = nn.ModuleList([copy.deepcopy(layer) for i in range(num_layers)])
         self.num_layers = num_layers
         self.norm = LayerNormANE(layer.embed_dim)
 
@@ -37,19 +35,30 @@ class TransformerDecoder(nn.Module):
         early_exit_from_layer_idx=None,
     ):
         if early_exit_from_layer_idx:
-            assert early_exit_from_layer_idx > 0 and \
-                early_exit_from_layer_idx < self.num_layers
+            assert (
+                early_exit_from_layer_idx > 0
+                and early_exit_from_layer_idx < self.num_layers
+            )
 
         x = decoder_embed
         intermediates = []
         for idx, l in enumerate(self.layers):
             if idx == early_exit_from_layer_idx:
-                logger.warning("Early exit taken from TransformerDecoder "
-                               f"after {idx}/{self.num_layers} layers")
+                logger.warning(
+                    "Early exit taken from TransformerDecoder "
+                    f"after {idx}/{self.num_layers} layers"
+                )
                 break
 
-            x = l(x, encoder_embed, encoder_k_mask, decoder_k_mask,
-                  decoder_qk_mask, decoder_pos_embed, encoder_pos_embed)
+            x = l(
+                x,
+                encoder_embed,
+                encoder_k_mask,
+                decoder_k_mask,
+                decoder_qk_mask,
+                decoder_pos_embed,
+                encoder_pos_embed,
+            )
 
             if return_intermediate:
                 intermediates.append(self.norm(x))
@@ -60,7 +69,6 @@ class TransformerDecoder(nn.Module):
 
 
 class TransformerDecoderLayer(nn.Module):
-
     def __init__(
         self,
         embed_dim,

@@ -30,12 +30,11 @@ from hft2ane.convert.convert import (
     METADATA_MODEL_CLS_KEY,
 )
 from hft2ane.evaluate.evaluate import (
-    sanity_check,
     confirm_ane_via_powermetrics,
     get_dummy_inputs,
     measure_ane_speedup_from_converted,
 )
-from hft2ane.utils.cli import argument, is_format_string, spinner
+from hft2ane.utils.cli import argument, spinner
 
 
 COMPUTE_UNIT_CHOICES = tuple(cu.name for cu in ComputeUnit)
@@ -246,7 +245,7 @@ def convert(args: argparse.Namespace):
                 f"exists: {out_path}",
             )
             continue
-    
+
         task = get_task(base_model.__class__)
 
         with noop(
@@ -371,10 +370,7 @@ def _verify(
                 f"Sanity check failed for '{pkg_path}'.\n" f"Error: {e!r}"
             )
         else:
-            print(
-                f"> 🛑 Sanity check failed for '{pkg_path}'.\n"
-                f"  📊 Error: {e!r}"
-            )
+            print(f"> 🛑 Sanity check failed for '{pkg_path}'.\n" f"  📊 Error: {e!r}")
     else:
         # `validate_model_outputs` does its own logging
         pass
@@ -397,7 +393,9 @@ def _verify(
     #         )
 
     with spinner("Measuring inference speedup vs ANE compute-unit disabled..."):
-        dummy_inputs = config.generate_dummy_inputs(preprocessor=preprocessor, framework=TensorType.PYTORCH)
+        dummy_inputs = config.generate_dummy_inputs(
+            preprocessor=preprocessor, framework=TensorType.PYTORCH
+        )
         coreml_inputs = {key: val[1] for key, val in dummy_inputs.items()}
         speedup = measure_ane_speedup_from_converted(converted, coreml_inputs)
     if speedup < speedup_threshold:
