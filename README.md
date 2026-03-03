@@ -57,6 +57,50 @@ I converted `deepset/roberta-base-squad2` as `RobertaForQuestionAnswering.mkpack
 
 So... these translations look basically successful!
 
+## CLI usage
+
+The CLI has two subcommands: `convert` and `verify`.
+
+### Convert
+
+Convert a HuggingFace model to an ANE-optimised CoreML `.mlpackage`:
+
+```bash
+# Interactive — prompts guide you through model selection
+poetry run python -m hft2ane.cli convert
+
+# Specify a model directly
+poetry run python -m hft2ane.cli convert bert-base-uncased
+
+# With options
+poetry run python -m hft2ane.cli convert bert-base-uncased \
+  --seq-len 256 \
+  --out-dir ./converted \
+  --pkg-name bert.mlpackage
+
+# Use a specific model class
+poetry run python -m hft2ane.cli convert bert-base-uncased \
+  --model-cls BertForSequenceClassification
+```
+
+After conversion, a verification step runs automatically (see below).
+
+### Verify
+
+Verify an already-converted model matches the original HF model's outputs:
+
+```bash
+poetry run python -m hft2ane.cli verify ./converted/bert.mlpackage
+
+# Also confirm it actually runs on the Neural Engine (requires sudo)
+sudo poetry run python -m hft2ane.cli verify ./converted/bert.mlpackage --confirm-ane
+```
+
+Verification does the following:
+- **Sanity check** — compares converted model outputs against the original, checking they agree within tolerance.
+- **Speedup measurement** — runs inference 100 times with ANE enabled vs disabled and reports the speedup ratio. Always runs.
+- **ANE confirmation** (optional, `--confirm-ane`, requires sudo) — uses Apple `powermetrics` to check that the Neural Engine is actually being used during inference.
+
 ## TODO
 
 - The sequence length gets baked into the exported model. HF exporters provides for variable sequence lengths, but we run into this issue https://github.com/apple/coremltools/issues/1763
