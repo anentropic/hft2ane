@@ -9,10 +9,13 @@ Ones that look interesting to me...
 - **DistilBERT:** reduced params by training under the guidance of a BERT tutor
 - **RoBERTa:** minor tweaks and an improved training regime, fine-tuned large RoBERTas are SOTA on many benchmarks.
 - **ALBERT:** reduced params and model tweaks. ALBERT-xxl (235M) beats BERT-large (335M) and RoBERTa-base.
-- https://huggingface.co/microsoft/graphcodebert-base
-  A 'Graphformer' (GNN-nested Transformers) "which also considers data-flow information along with code sequences" ... "trained on the CodeSearchNet dataset, which includes 2.3M functions with document pairs for six programming languages". See also:
-  - https://github.com/microsoft/CodeBERT
-    the repo contains GraphCodeBERT plus additional models below
+- **DeBERTa**: "improves the BERT and RoBERTa models using disentangled attention and enhanced mask decoder. With those two improvements, DeBERTa out perform RoBERTa on a majority of NLU tasks" and "using ELECTRA-Style pre-training ... V3 version significantly improves the model performance on downstream tasks"
+  - https://huggingface.co/microsoft/deberta-v3-base
+- **CodeBERT**:  
+  Various models, perhaps evolving in pursuit of performance.  
+  https://github.com/microsoft/CodeBERT
+  - https://huggingface.co/microsoft/graphcodebert-base
+    A 'Graphformer' (GNN-nested Transformers) "which also considers data-flow information along with code sequences" ... "trained on the CodeSearchNet dataset, which includes 2.3M functions with document pairs for six programming languages". See also:
   - https://arxiv.org/pdf/2009.08366.pdf "GraphCodeBERT, a pre-trained model for programming language that considers the inherent structure of code". The graphs in training are based on dataflow analysis, rather than AST (which usually has an unnecessrily deep and noisy structure). In their results it outperforms CodeBERT below, as well as a RoBERTa pre-trained on code.
     - this looks like the raw dataset https://huggingface.co/datasets/code_search_net ...this doesn't have the dataflow graph though
     - the paper doesn't say exactly how the dataflow graphs are generated, but looks like the code is here: https://github.com/microsoft/CodeBERT/tree/master/GraphCodeBERT/codesearch/parser
@@ -35,13 +38,26 @@ Ones that look interesting to me...
   - https://github.com/lm-sys/FastChat#FastChat-T5 -> https://huggingface.co/lmsys/fastchat-t5-3b-v1.0 a finetuned Flan-T5-XL (3B) that beats Dolly v2 on the Vicuna benchmark. too big for ANE, but maybe useful with Metal backend for local Langchain etc.
 - **GPT** of course
   - see https://github.com/anentropic/experiments-coreml-gpt2#update for notes and related models
+    - https://arxiv.org/pdf/2305.07759.pdf "TinyStories" manages to train very small GPT-Neo models to write coherently
+    - ...or even respond to a ReAct prompt! https://huggingface.co/nikitastaf1996/TinyStories-Instruct-33M-react-medium-tasks-dirty (sort of, maybe not usefully... but it is only 33M!)
   - https://huggingface.co/MBZUAI/LaMini-GPT-1.5B somehow outperforms Alpaca LLaMA 7B on some metrics 🤯 (will be deeply underwhelming c/f ChatGTP of course). It is just GPT2-XL fine-tuned so the https://github.com/smpanaro/more-ane-transformers code should work.
   - See also:
     - https://huggingface.co/MBZUAI/LaMini-Flan-T5-783M
     - https://huggingface.co/MBZUAI/LaMini-Neo-1.3B
     - https://huggingface.co/MBZUAI/LaMini-Cerebras-1.3B
     - and smaller versions too
-- **BART** is to BERT as T5 is to GPT (i.e. encoder-decoder vs encoder-only)
+  - There are 125M and 1.3B versions of GPT-Neo
+    - https://goose.ai/docs/models recommends the "Fairseq" pre-trained variants
+  - GPT-J is 6B, so too big
+    - https://huggingface.co/togethercomputer/GPT-JT-6B-v1 is an impressively trained variant that beats GPT3 in classification tasks
+- **CodeGen2** https://huggingface.co/Salesforce/codegen2-1B it's a custom code model, possibly T5-like since they use "prefix-LM" encoder-decoder approach
+  - https://github.com/salesforce/CodeGen2
+  - https://arxiv.org/pdf/2305.02309.pdf in fact the research was mostly useful in failing their initial goals: 
+    1. the Prefix-LM architecture does not yield any measurable improvements on our set of tasks
+    2. training a model with infill sampling is not a free lunch
+    3. a simple mixture of causal language modeling and span-corruption limited to within-file spans is sufficient
+    4. a mixture distribution of programming and natural languages looks promising.
+- **BART** is to BERT approximately as T5 is to GPT (i.e. encoder-decoder vs encoder-only)
   - https://huggingface.co/Babelscape/rebel-large a BART that extracts knowledge-graph triples
   - https://huggingface.co/facebook/bart-large-mnli does "Zero-Shot Classification"
 - **SAM (Segment Anything)**

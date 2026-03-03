@@ -2,10 +2,13 @@ import logging
 import multiprocessing as mp
 import os
 import time
+import timeit
+from dataclasses import dataclass
 
 import coremltools as ct
 import numpy as np
 import torch
+from ane_transformers.testing_utils import compute_psnr
 from asitop.utils import run_powermetrics_process, parse_powermetrics
 from transformers.modeling_utils import PreTrainedModel
 
@@ -32,7 +35,7 @@ def get_dummy_inputs(model: PreTrainedModel) -> dict[str, np.ndarray]:
     return _normalise_inputs(model.dummy_inputs)
 
 
-def _values_agree(baseline: np.ndarray, coreml: np.ndarray) -> bool:
+def _values_agree(baseline: np.ndarray, coreml: np.ndarray, rtol: float) -> bool:
     """
     Check if the baseline and converted models agree on the outputs.
 
@@ -75,13 +78,26 @@ def _values_agree(baseline: np.ndarray, coreml: np.ndarray) -> bool:
     if baseline.dtype != coreml.dtype:
         return False
     if np.issubdtype(baseline.dtype, np.floating):
-        return np.allclose(baseline, coreml, rtol=0.1)
+        return np.allclose(baseline, coreml, rtol=rtol)
     return bool(np.alltrue(baseline == coreml))
 
 
+@dataclass
+class Disagreement:
+    values_match: bool
+    peak_snr_passed: bool
+    min_snr: float  # dB
+    measured_peak_snr: float  # dB
+    baseline_vals: np.ndarray
+    coreml_vals: np.ndarray
+
+
 def sanity_check(
-    baseline: PreTrainedModel, converted: ct.models.MLModel
-) -> tuple[bool, dict]:
+    baseline: PreTrainedModel,
+    converted: ct.models.MLModel,
+    rtol: float = 0.1,
+    min_snr: float = 60.0,
+) -> tuple[bool, dict[tuple[str, str], Disagreement]]:
     """
     Sanity check the converted CoreML model by comparing inference results.
 
@@ -89,12 +105,15 @@ def sanity_check(
         Tuple of (bool, dict):
             bool: True if the baseline and converted models agree on the outputs
             dict: Outputs where the baseline and converted models disagree
-                  (by more than ∓0.01)
+                  (by rtol ∓0.1) or the peak SNR is less than `min_snr`.
 
-    TODO:
+    NOTE:
     ane_transformers.testing_utils.compute_psnr is how Apple were evaluating
-    their conversion (and for classification task, does argmax point to same
-    input id?)
+    their conversion (and for classification tasks, does argmax point to same
+    input id?) ...they use 60dB as min level, which is quite high, perhaps
+    just tuned to the result they got naturally?
+    https://resources.pcb.cadence.com/blog/2020-what-is-signal-to-noise-ratio-and-how-to-calculate-it
+    suggests 25-40dB is 'good' (for WiFi) and > 40dB is 'excellent'.
     """
     with torch.no_grad():
         baseline_outputs = baseline(**baseline.dummy_inputs)
@@ -112,11 +131,28 @@ def sanity_check(
         paired_iter = zip(baseline_outputs.items(), coreml_items_iter)
     else:
         paired_iter = zip(enumerate(baseline_outputs), coreml_items_iter)
-    disagreements = {}
+    disagreements: dict[tuple[str, str], Disagreement] = {}
     for (baseline_name, baseline_vals), (coreml_name, coreml_vals) in paired_iter:
-        baseline_vals = baseline_vals.numpy()
-        if not _values_agree(baseline_vals, coreml_vals):
-            disagreements[(baseline_name, coreml_name)] = (baseline_vals, coreml_vals)
+        np_baseline_vals = baseline_vals.numpy()
+
+        values_match = _values_agree(np_baseline_vals, coreml_vals, rtol)
+
+        # `compute_psnr` returns decibels (dB)
+        peak_signal_to_noise_ratio: float = compute_psnr(
+            baseline_vals.softmax(1).numpy(),
+            torch.from_numpy(coreml_vals).softmax(1).numpy(),
+        )
+        peak_snr_passed = peak_signal_to_noise_ratio > min_snr
+
+        if not (values_match and peak_snr_passed):
+            disagreements[(baseline_name, coreml_name)] = Disagreement(
+                values_match=values_match,
+                peak_snr_passed=peak_snr_passed,
+                min_snr=min_snr,
+                measured_peak_snr=peak_signal_to_noise_ratio,
+                baseline_vals=np_baseline_vals,
+                coreml_vals=coreml_vals,
+            )
 
     return (not disagreements), disagreements
 
@@ -158,7 +194,7 @@ def _asitop_collector(conn: mp.connection.Connection, interval: int) -> None:
                     break
 
 
-def confirm_neural_engine(
+def confirm_ane_via_powermetrics(
     converted: ct.models.MLModel,
     dummy_inputs: dict[str, np.ndarray],
     timeout: int = 5,
@@ -217,3 +253,44 @@ def confirm_neural_engine(
     # if we took any measurements where ANE power consumption was > 0
     # then we can say the model was using ANE
     return any(ane_readings)
+
+
+def _measure_ane_speedup(
+    ane_model: ct.models.MLModel,
+    non_model: ct.models.MLModel,
+    dummy_inputs: dict[str, np.ndarray],
+    iterations: int = 100,
+) -> float:
+    ane_result = timeit.timeit(
+        lambda: ane_model.predict(dummy_inputs), number=iterations
+    )
+    non_result = timeit.timeit(
+        lambda: non_model.predict(dummy_inputs), number=iterations
+    )
+    # >1 is a speedup, larger values are better:
+    return non_result / ane_result
+
+
+def measure_ane_speedup(
+    mlpackage_path: str,
+    dummy_inputs: dict[str, np.ndarray],
+    iterations: int = 100,
+) -> float:
+    ane_model = ct.models.MLModel(mlpackage_path, compute_units=ct.ComputeUnit.ALL)
+    non_model = ct.models.MLModel(
+        mlpackage_path, compute_units=ct.ComputeUnit.CPU_AND_GPU
+    )
+    return _measure_ane_speedup(ane_model, non_model, dummy_inputs, iterations)
+
+
+def measure_ane_speedup_from_converted(
+    ane_model: ct.models.MLModel,
+    dummy_inputs: dict[str, np.ndarray],
+    iterations: int = 100,
+) -> float:
+    assert ane_model.compute_unit in (ct.ComputeUnit.ALL, ct.ComputeUnit.CPU_AND_NE)
+    assert ane_model.package_path
+    non_model = ct.models.MLModel(
+        ane_model.package_path, compute_units=ct.ComputeUnit.CPU_AND_GPU
+    )
+    return _measure_ane_speedup(ane_model, non_model, dummy_inputs, iterations)

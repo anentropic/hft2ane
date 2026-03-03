@@ -34,15 +34,77 @@ The process of translating models from HF `transformers` into ANE-friendly form 
 Currently `hft2ane` supports:
 
 - **DistilBERT**
-- **BERT** (TODO: cross-attention, i.e. EncoderDecoderModel support)
+- **BERT** (TODO: EncoderDecoderModel support, needs translatedcross-attention implementation)
 - **RoBERTa** (TODO: CausalLM and EncoderDecoderModel support)
+
+TODO: export of `*ForMultipleChoice` models is currently failing in all cases, an issue at JIT tracing step (turns out `model.dummy_inputs` is insufficient for this use case).
+
+EncoderDecoderModels are also a problem for HF `exporters` project - they [resort](https://github.com/huggingface/exporters/blob/main/src/exporters/coreml/__main__.py#L54) to exporting separate 'encoder' and 'decoder' .mlpackage files, which I guess you can then glue together yourself with a [CoreML pipeline](https://apple.github.io/coremltools/source/coremltools.models.html#module-coremltools.models.pipeline).
+
+#### NOTE
+
+Only PyTorch models are supported.
+
+### Results
+
+Apple report "up to" 10x speedup for their ANE-optimised DistilBERT, in the form of these hard-to-read graphs https://machinelearning.apple.com/research/neural-engine-transformers#figure2 - we can see that actual speedup is somewhat dependent on batch size and sequence length (more speedup with longer sequences).
+
+We do a basic sanity check after export from `hft2ane` using a batch of 1 and very short sequence. Our version of DistilBERT is the same as Apple's one above and reports a **3.67x** speedup for this check on my 2020 M1 Macbook Air. This is comparing the compiled CoreML models with or without the ANE compute unit flag enabled. We can use that as a baseline.
+
+I converted `dslim/bert-base-NER-uncased` as `BertForTokenClassification.mlpackage` and measured a **3.26x** speedup.
+
+I converted `deepset/roberta-base-squad2` as `RobertaForQuestionAnswering.mkpackage` and measured **3.53x** speedup.
+
+So... these translations look basically successful!
+
+## CLI usage
+
+The CLI has two subcommands: `convert` and `verify`.
+
+### Convert
+
+Convert a HuggingFace model to an ANE-optimised CoreML `.mlpackage`:
+
+```bash
+# Interactive — prompts guide you through model selection
+poetry run python -m hft2ane.cli convert
+
+# Specify a model directly
+poetry run python -m hft2ane.cli convert bert-base-uncased
+
+# With options
+poetry run python -m hft2ane.cli convert bert-base-uncased \
+  --seq-len 256 \
+  --out-dir ./converted \
+  --pkg-name bert.mlpackage
+
+# Use a specific model class
+poetry run python -m hft2ane.cli convert bert-base-uncased \
+  --model-cls BertForSequenceClassification
+```
+
+After conversion, a verification step runs automatically (see below).
+
+### Verify
+
+Verify an already-converted model matches the original HF model's outputs:
+
+```bash
+poetry run python -m hft2ane.cli verify ./converted/bert.mlpackage
+
+# Also confirm it actually runs on the Neural Engine (requires sudo)
+sudo poetry run python -m hft2ane.cli verify ./converted/bert.mlpackage --confirm-ane
+```
+
+Verification does the following:
+- **Sanity check** — compares converted model outputs against the original, checking they agree within tolerance.
+- **Speedup measurement** — runs inference 100 times with ANE enabled vs disabled and reports the speedup ratio. Always runs.
+- **ANE confirmation** (optional, `--confirm-ane`, requires sudo) — uses Apple `powermetrics` to check that the Neural Engine is actually being used during inference.
 
 ## TODO
 
-- `ane_transformers` is currently pinned to PyTorch `<=1.11.0`. This means we can't load and convert any models which use PyTorch 2+ features. See https://github.com/apple/ml-ane-transformers/pull/3
-  - due to bugs in their DistilBERT, and factoring out some common stuff after implementing BERT, there is very little we're importing from that lib (just the `LayerNormANE` class and the `compute_psnr` test util)... we could easily just vendor those in and drop the dependency
-  - there's a few places where PyTorch 2's new `squeeze` with tuple of dims would allow us to remove a double squeeze
-- Can we make use of this https://github.com/huggingface/exporters ?
+- The sequence length gets baked into the exported model. HF exporters provides for variable sequence lengths, but we run into this issue https://github.com/apple/coremltools/issues/1763
+  - needs to be exposed as a cli param
 
 ### NOTE re asitop logs
 

@@ -1,7 +1,7 @@
 import warnings
 from contextlib import contextmanager
 from types import NoneType
-from typing import Any, Iterator, get_type_hints, get_args, Type, TypeGuard
+from typing import Any, Iterator, Union, get_type_hints, get_args, Type, TypeGuard
 
 import torch.nn
 from transformers import PreTrainedModel
@@ -11,18 +11,18 @@ from transformers.modeling_outputs import ModelOutput
 from hft2ane.mappings import get_hf_auto_model, get_output_for_auto_model
 
 
-TensorT = (
-    torch.Tensor
-    | torch.DoubleTensor
-    | torch.FloatTensor
-    | torch.LongTensor
-    | torch.IntTensor
-    | torch.ShortTensor
-    | torch.HalfTensor
-    | torch.CharTensor
-    | torch.ByteTensor
-    | torch.BoolTensor
-)
+TensorT = Union[
+    torch.Tensor,
+    torch.DoubleTensor,
+    torch.FloatTensor,
+    torch.LongTensor,
+    torch.IntTensor,
+    torch.ShortTensor,
+    torch.HalfTensor,
+    torch.CharTensor,
+    torch.ByteTensor,
+    torch.BoolTensor,
+]
 
 
 @contextmanager

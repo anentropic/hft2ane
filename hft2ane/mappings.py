@@ -4,6 +4,7 @@ from collections import defaultdict
 from types import ModuleType
 from typing import Type, TypeVar
 
+from exporters.coreml.features import FeaturesManager
 from transformers import modeling_outputs
 from transformers.modeling_utils import PreTrainedModel
 from transformers.models.auto.configuration_auto import AutoConfig
@@ -124,11 +125,15 @@ def get_hft2ane_model(model: Type[PreTrainedModel]) -> Type[PreTrainedModel]:
     raise ModelNotFoundError(f"Could not find hft2ane model matching: {model.__name__}")
 
 
-_CONCRETE_TO_AUTO = {
-    concrete_model: auto_model
-    for auto_model in _AUTO_MODELS
-    for concrete_model in auto_model._model_mapping.values()
-}
+def _concrete_to_auto():
+    mapping = {}
+    for auto_model in _AUTO_MODELS:
+        for concrete_model in auto_model._model_mapping.values():
+            mapping.setdefault(concrete_model, []).append(auto_model)
+    return mapping
+
+
+_CONCRETE_TO_AUTO = _concrete_to_auto()
 
 
 def get_hf_auto_model(
@@ -151,11 +156,23 @@ def get_hf_auto_model(
     else:
         # models using vanilla HF transformers classes
         try:
-            return _CONCRETE_TO_AUTO[model]
+            candidates = _CONCRETE_TO_AUTO[model]
         except KeyError:
             raise ModelNotFoundError(
                 f"Could not find HF AutoModel matching: {model.__name__}"
             )
+        if not candidates:
+            raise ModelNotFoundError(
+                f"Could not find HF AutoModel matching: {model.__name__}"
+            )
+        prefix_len = len("AutoModel")
+        best_matches = filter(
+            lambda cls: model.__name__.endswith(cls.__name__[prefix_len:]), candidates
+        )
+        try:
+            return next(best_matches)
+        except StopIteration:
+            return candidates[0]
 
 
 _AUTO_MODEL_TO_OUTPUT = {
@@ -217,26 +234,13 @@ _CLASSIFIER_TASKS = {
     "text-classification",
     "token-classification",  # hft2ane
 }
-# https://github.com/huggingface/exporters/blob/7f82edfcda2fe39790f93ba5a9500866709fc71b/src/exporters/coreml/features.py#L103
-_TASKS_TO_AUTOMODELS = {
-    "feature-extraction": modeling_auto.AutoModel,
-    "text-generation": modeling_auto.AutoModelForCausalLM,
-    "automatic-speech-recognition": modeling_auto.AutoModelForCTC,
-    "image-classification": modeling_auto.AutoModelForImageClassification,
-    "image-segmentation": modeling_auto.AutoModelForImageSegmentation,
-    "masked-im": modeling_auto.AutoModelForMaskedImageModeling,
-    "fill-mask": modeling_auto.AutoModelForMaskedLM,
-    "multiple-choice": modeling_auto.AutoModelForMultipleChoice,
-    "next-sentence-prediction": modeling_auto.AutoModelForNextSentencePrediction,
-    "object-detection": modeling_auto.AutoModelForObjectDetection,
-    "question-answering": modeling_auto.AutoModelForQuestionAnswering,
-    "semantic-segmentation": modeling_auto.AutoModelForSemanticSegmentation,
-    "text2text-generation": modeling_auto.AutoModelForSeq2SeqLM,
-    "text-classification": modeling_auto.AutoModelForSequenceClassification,
-    "speech-seq2seq": modeling_auto.AutoModelForSpeechSeq2Seq,
-    "token-classification": modeling_auto.AutoModelForTokenClassification,
-}
-_AUTOMODELS_TO_TASKS = {v: k for k, v in _TASKS_TO_AUTOMODELS.items()}
+
+_AUTOMODELS_TO_TASKS = {v: k for k, v in FeaturesManager._TASKS_TO_AUTOMODELS.items()}
+
+
+def get_task(model: Type[PreTrainedModel]) -> str:
+    automodel = get_hf_auto_model(model)
+    return _AUTOMODELS_TO_TASKS[automodel]
 
 
 def is_classifier(model: Type[PreTrainedModel]):

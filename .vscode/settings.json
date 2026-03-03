@@ -1,0 +1,18 @@
+{
+    "python.analysis.autoImportCompletions": true,
+    "python.testing.pytestArgs": [
+        "tests"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true
+    ,
+    "files.exclude": {
+        "**/__pycache__": true
+    },
+    "search.exclude": {
+        "**/__pycache__": true
+    },
+    "files.watcherExclude": {
+        "**/__pycache__": true
+    }
+}

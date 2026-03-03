@@ -1,12 +1,22 @@
-from typing import Any, Type
+import os
+from typing import Any, Type, Union
 from warnings import warn
 
 import torch
 import coremltools as ct
 import numpy as np
+from exporters.coreml.config import CoreMLConfig
+from exporters.coreml.convert import export
+from exporters.coreml.features import FeaturesManager
 from huggingface_hub import model_info
+from huggingface_hub.utils import HfHubHTTPError
+from transformers import AutoFeatureExtractor, AutoProcessor, AutoTokenizer
+from transformers.feature_extraction_utils import FeatureExtractionMixin
 from transformers.modeling_utils import PreTrainedModel
 from transformers.models.auto.modeling_auto import _BaseAutoModelClass
+from transformers.processing_utils import ProcessorMixin
+from transformers.tokenization_utils_base import PreTrainedTokenizerBase
+from transformers.onnx.utils import get_preprocessor
 
 from hft2ane.mappings import get_hft2ane_model
 from hft2ane.utils.introspection import model_config
@@ -30,10 +40,14 @@ from the model's HF repo (as opposed to only the `transformers` package)
 """
 
 
-ModelT = Type[PreTrainedModel] | Type[_BaseAutoModelClass]
+ModelT = Union[Type[PreTrainedModel], Type[_BaseAutoModelClass]]
+
+PreprocessorT = Union[PreTrainedTokenizerBase, FeatureExtractionMixin, ProcessorMixin]
+
 
 METADATA_MODEL_NAME_KEY = "com.github.anentropic.hft2ane.model"
 METADATA_MODEL_CLS_KEY = "com.github.anentropic.hft2ane.type"
+METADATA_MODEL_SEQ_LEN_KEY = "com.github.anentropic.hft2ane.sequenceLength"
 
 
 def get_baseline_model(model_name: str, model_cls: ModelT) -> PreTrainedModel:
@@ -99,43 +113,100 @@ def _get_ct_outputs(model: PreTrainedModel) -> list[ct.TensorType]:
     ]
 
 
-def _get_classifier_config(id2label: dict[int, int | str]) -> ct.ClassifierConfig:
-    """
-    TODO: we can't use this because coremltools complains about the shape of outputs
-    from unaltered HF models. HF `exporters` gets around this by adding a Wrapper
-    module to the model which adds pre and post processing, akin to a `pipeline`.
-    https://github.com/huggingface/exporters/blob/7f82edfcda2fe39790f93ba5a9500866709fc71b/src/exporters/coreml/convert.py#L292
-
-    I think solution for us will be to piggy-back on `exporters` completely.
-    """
-    # we could probably just assume id2label keys are contiguous and start at 0
-    # but the data structure does not guarantee this, so play it safe
-    label_type = type(next(id2label.values().__iter__()))
-    default = "" if label_type is str else 0
-    labels = [default] * (max(id2label.keys()) + 1)
-    for i, label in id2label.items():
-        labels[i] = label
-    # they only specify `class_labels``
-    # https://github.com/huggingface/exporters/blob/7f82edfcda2fe39790f93ba5a9500866709fc71b/src/exporters/coreml/convert.py#L539
-    return ct.ClassifierConfig(
-        class_labels=labels,
-    )
-
-
 def _set_metadata(
-    mlmodel: ct.models.MLModel, model_name: str, model_cls_name: str | None
+    mlmodel: ct.models.MLModel,
+    model_name: str,
+    model_cls_name: str | None,
+    sequence_length: int | None = None,
 ) -> None:
-    hfinfo = model_info(model_name)
-    mlmodel.license = hfinfo.cardData["license"]
-    mlmodel.author = hfinfo.author or "<via Hugging Face>"
-    mlmodel.version = hfinfo.sha
-    mlmodel.short_description = (
-        f"{hfinfo.modelId} re-implemented using hft2ane "
-        "for compatibility with execution on Neural Engine."
-    )
+    try:
+        hfinfo = model_info(model_name)
+    except HfHubHTTPError as e:
+        warn(
+            f"Failed to fetch model info for {model_name} due to: {e!r} "
+            "Unable to set author metadata."
+        )
+    else:
+        try:
+            mlmodel.license = hfinfo.cardData["license"]
+        except (AttributeError, KeyError):
+            pass
+        mlmodel.author = hfinfo.author or "<via Hugging Face>"
+        mlmodel.version = hfinfo.sha
+        mlmodel.short_description = (
+            f"{hfinfo.modelId} re-implemented using hft2ane "
+            "for compatibility with execution on Neural Engine."
+        )
     mlmodel.user_defined_metadata[METADATA_MODEL_NAME_KEY] = model_name
+    if sequence_length is not None:
+        mlmodel.user_defined_metadata[METADATA_MODEL_SEQ_LEN_KEY] = str(sequence_length)
     if model_cls_name:
         mlmodel.user_defined_metadata[METADATA_MODEL_CLS_KEY] = model_cls_name
+
+
+def hf_to_coreml(
+    hft2ane_model: PreTrainedModel,
+    task: str,
+    preprocessor_name: str,
+    sequence_length: int | None,
+    out_path: str,
+) -> tuple[ct.models.MLModel, PreprocessorT, CoreMLConfig]:
+    # TODO: FeaturesManager has weird gaps in coverage for e.g. RoBERTa
+    _, model_coreml_config = FeaturesManager.check_supported_model_or_raise(
+        hft2ane_model, feature=task
+    )
+
+    overrides: dict[str, Any] = (
+        {"inferSequenceLengthFromConfig": True}
+        if sequence_length is None
+        else {"sequenceLength": sequence_length}
+    )
+
+    # TODO: use_past (pre-cached Decoder) or seq2seq (EncoderDecoder)
+    coreml_config = model_coreml_config(hft2ane_model.config, overrides=overrides)
+
+    model_name = hft2ane_model.name_or_path
+
+    # Instantiate the appropriate preprocessor
+    preprocessor = None
+    if preprocessor_name == "auto":
+        preprocessor = get_preprocessor(model_name)
+    elif preprocessor_name == "tokenizer":
+        preprocessor = AutoTokenizer.from_pretrained(model_name)
+    elif preprocessor_name == "feature_extractor":
+        preprocessor = AutoFeatureExtractor.from_pretrained(model_name)
+    elif preprocessor_name == "processor":
+        preprocessor = AutoProcessor.from_pretrained(model_name)
+
+    if not preprocessor:
+        raise ValueError(
+            f"Unknown preprocessor type '{preprocessor_name}' for '{model_name}'"
+        )
+
+    converted = export(
+        preprocessor,
+        hft2ane_model,
+        coreml_config,
+        quantize="float16",
+    )
+    # so far HF `export` doesn't set author etc metadata
+    # (but it does set input/output descriptions and classifier config)
+    _set_metadata(
+        converted,
+        model_name,
+        hft2ane_model.__class__.__name__,
+        coreml_config.sequenceLength,
+    )
+
+    # workaround for https://github.com/apple/coremltools/issues/1680
+    ct.models.MLModel(
+        converted._spec,
+        weights_dir=converted._weights_dir,
+        skip_model_load=True,
+    ).save(out_path)
+
+    converted.package_path = os.path.abspath(out_path)
+    return converted, preprocessor, coreml_config
 
 
 def to_coreml_internal(
@@ -143,7 +214,7 @@ def to_coreml_internal(
     hft2ane_model: PreTrainedModel,
     out_path: str,
     compute_units: ct.ComputeUnit = ct.ComputeUnit.ALL,
-    model_cls_name: str | None = None,
+    model_cls_name: str | None = None,  # for metadata only
     is_classifier: bool = False,
 ) -> ct.models.MLModel:
     """
@@ -158,6 +229,7 @@ def to_coreml_internal(
     Which implies that it is only relevant at inference time, and its presence in
     `ct.convert` signature is just a convenience for setting the flag on the returned
     model instance if you intend to use it immediately (which we do, for verification)
+    Confirmed: https://github.com/apple/coremltools/issues/1849
     """
     if baseline_model.num_parameters() > 1e9:
         warn(
@@ -165,6 +237,7 @@ def to_coreml_internal(
             "Neural Engine's ~3GB memory constraints and will execute on CPU. "
             "Run the --confirm-neural-engine evaluation to confirm."
         )
+
     traced_optimized_model = torch.jit.trace(
         hft2ane_model,
         list(baseline_model.dummy_inputs.values()),
@@ -190,10 +263,10 @@ def to_coreml_internal(
     ct.models.MLModel(
         mlmodel._spec,
         weights_dir=mlmodel._weights_dir,
-        is_temp_package=True,
         skip_model_load=True,
     ).save(out_path)
 
+    mlmodel.package_path = os.path.abspath(out_path)
     return mlmodel
 
 
