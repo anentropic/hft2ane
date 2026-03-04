@@ -1,22 +1,30 @@
+exclude: ^vendor/
 repos:
-- repo: https://github.com/charliermarsh/ruff-pre-commit
-  rev: 'v0.0.264'
-  hooks:
-    - id: ruff
-      args: [--fix]
-      exclude: ^vendor/
-- repo: https://github.com/psf/black
-  rev: "23.3.0"
-  hooks:
-    - id: black
-      exclude: ^vendor/
-- repo: local
-  hooks:
-    - id: mypy
-      name: mypy
-      entry: mypy
-      args: ["-p", "hft2ane"]
-      pass_filenames: false
-      language: system
-      types: [python]
-      require_serial: true
+  - repo: builtin
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-json
+      - id: check-toml
+      - id: check-yaml
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.1
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.10.3
+    hooks:
+      - id: uv-lock
+
+  - repo: local
+    hooks:
+      - id: basedpyright
+        name: Type checking (basedpyright)
+        entry: uv run basedpyright
+        language: system
+        types: [python]
+        pass_filenames: false
