@@ -3,15 +3,12 @@ import warnings
 import torch
 import torch.nn as nn
 
-
 WARN_MSG_FOR_TRAINING_ATTEMPT = (
     "This model is optimized for on-device execution only. "
     "Please use the original implementation from Hugging Face for training"
 )
 
-WARN_MSG_FOR_DICT_RETURN = (
-    "coremltools does not support dict outputs. Please set return_dict=False"
-)
+WARN_MSG_FOR_DICT_RETURN = "coremltools does not support dict outputs. Please set return_dict=False"
 
 # Note: Original implementation of distilbert uses an epsilon value of 1e-12
 # which is not friendly with the float16 precision that ANE uses by default
@@ -30,9 +27,7 @@ def correct_for_bias_scale_order_inversion(
     unexpected_keys,
     error_msgs,
 ):
-    state_dict[prefix + "bias"] = (
-        state_dict[prefix + "bias"] / state_dict[prefix + "weight"]
-    )
+    state_dict[prefix + "bias"] = state_dict[prefix + "bias"] / state_dict[prefix + "weight"]
     return state_dict
 
 
@@ -52,6 +47,48 @@ class ANEMixin:
         # Register hook for unsqueezing nn.Linear parameters to match nn.Conv2d parameter spec
         self._register_load_state_dict_pre_hook(self.linear_to_conv2d_map)
 
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        """
+        Override from_pretrained to handle Linear→Conv2d weight reshaping.
+
+        Transformers 5.x compares checkpoint shapes against model shapes BEFORE
+        calling load_state_dict (where our reshape hook lives), causing mismatched
+        size errors for our Conv2d layers. We work around this by loading weights
+        into the HF parent model (which uses nn.Linear) first, then transferring
+        to our ANE model via load_state_dict (which triggers our reshape hook).
+        """
+        from transformers.modeling_utils import PreTrainedModel
+
+        # Find the HF parent class (the non-Mixin base)
+        hf_cls = next(
+            (
+                base
+                for base in cls.__bases__
+                if isinstance(base, type) and issubclass(base, PreTrainedModel)
+            ),
+            None,
+        )
+
+        if hf_cls is None:
+            return super().from_pretrained(
+                pretrained_model_name_or_path, *model_args, **kwargs
+            )
+
+        # Load into HF model (nn.Linear layers, no size mismatch)
+        hf_model = hf_cls.from_pretrained(
+            pretrained_model_name_or_path, *model_args, **kwargs
+        )
+
+        # Create our ANE model (nn.Conv2d layers) with same config
+        ane_model = cls(hf_model.config)
+
+        # load_state_dict triggers our pre_hook that reshapes Linear→Conv2d weights
+        ane_model.load_state_dict(hf_model.state_dict())
+
+        del hf_model
+        return ane_model
+
     def linear_to_conv2d_map(self, state_dict, *args, **kwargs):
         """
         Unsqueeze twice to map nn.Linear weights to nn.Conv2d weights
@@ -70,10 +107,7 @@ class ANEMixin:
         """
         # hft2ane: added this logic to unsqueeze input where the output is a Conv2d
         if input_embeddings.weight.shape != output_embeddings.weight.shape:
-            if (
-                len(input_embeddings.weight.shape) == 2
-                and len(output_embeddings.weight.shape) == 4
-            ):
+            if len(input_embeddings.weight.shape) == 2 and len(output_embeddings.weight.shape) == 4:
                 normalised_input_weight = nn.Parameter(
                     input_embeddings.weight.unsqueeze(-1).unsqueeze(-1)
                 )

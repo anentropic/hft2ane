@@ -1,22 +1,22 @@
+# pyright: reportArgumentType=false, reportAttributeAccessIssue=false, reportOptionalSubscript=false, reportOptionalMemberAccess=false, reportOperatorIssue=false
 import importlib
 import pkgutil
 from collections import defaultdict
 from types import ModuleType
-from typing import Type, TypeVar
+from typing import TypeVar
 
 from exporters.coreml.features import FeaturesManager
 from transformers import modeling_outputs
 from transformers.modeling_utils import PreTrainedModel
-from transformers.models.auto.configuration_auto import AutoConfig
 from transformers.models.auto import modeling_auto
+from transformers.models.auto.configuration_auto import AutoConfig
 
 from hft2ane.exceptions import ModelNotFoundError
 
+T = TypeVar("T", bound=type)
 
-T = TypeVar("T", bound=Type)
 
-
-def _get_public_classes(module: ModuleType, base_class: Type[T]) -> list[Type[T]]:
+def _get_public_classes(module: ModuleType, base_class: type[T]) -> list[type[T]]:
     return [
         cls
         for attr in dir(module)
@@ -27,20 +27,20 @@ def _get_public_classes(module: ModuleType, base_class: Type[T]) -> list[Type[T]
     ]
 
 
-def _auto_models() -> list[Type[modeling_auto._BaseAutoModelClass]]:
+def _auto_models() -> list[type[modeling_auto._BaseAutoModelClass]]:
     return _get_public_classes(modeling_auto, modeling_auto._BaseAutoModelClass)
 
 
 _AUTO_MODELS = _auto_models()
 
 
-def _names_to_auto_models() -> dict[str, list[Type[modeling_auto._BaseAutoModelClass]]]:
+def _names_to_auto_models() -> dict[str, list[type[modeling_auto._BaseAutoModelClass]]]:
     """
     Maps model type names to the AutoModel classes registered for that model type.
     """
     mapping = defaultdict(list)
     for cls in _AUTO_MODELS:
-        for name in cls._model_mapping._model_mapping.keys():
+        for name in cls._model_mapping._model_mapping:
             mapping[name].append(cls)
     return mapping
 
@@ -48,7 +48,7 @@ def _names_to_auto_models() -> dict[str, list[Type[modeling_auto._BaseAutoModelC
 _BASE_NAMES_TO_AUTO_MODELS = _names_to_auto_models()
 
 
-def get_hf_auto_models(name: str) -> list[Type[modeling_auto._BaseAutoModelClass]]:
+def get_hf_auto_models(name: str) -> list[type[modeling_auto._BaseAutoModelClass]]:
     """
     For most pre-trained model names on HuggingFace Hub, this function returns a
     list of the corresponding HF AutoModel classes valid for that model type.
@@ -57,7 +57,7 @@ def get_hf_auto_models(name: str) -> list[Type[modeling_auto._BaseAutoModelClass
     return _BASE_NAMES_TO_AUTO_MODELS[config.model_type]
 
 
-def get_hf_concrete_models(name: str) -> list[Type[PreTrainedModel]]:
+def get_hf_concrete_models(name: str) -> list[type[PreTrainedModel]]:
     """
     For most pre-trained model names on HuggingFace Hub, this function returns a
     list of the corresponding HF concrete model classes valid for that model type.
@@ -69,7 +69,7 @@ def get_hf_concrete_models(name: str) -> list[Type[PreTrainedModel]]:
     ]
 
 
-def _names_to_hft2ane_models() -> dict[str, list[Type[PreTrainedModel]]]:
+def _names_to_hft2ane_models() -> dict[str, list[type[PreTrainedModel]]]:
     from . import models
 
     mapping = {}
@@ -114,7 +114,7 @@ def get_hft2ane_model_names(name: str) -> list[tuple[str, bool]]:
     return names
 
 
-def get_hft2ane_model(model: Type[PreTrainedModel]) -> Type[PreTrainedModel]:
+def get_hft2ane_model(model: type[PreTrainedModel]) -> type[PreTrainedModel]:
     """
     For a given HuggingFace model class, this function returns the corresponding
     hft2ane model class, if there is one.
@@ -137,8 +137,8 @@ _CONCRETE_TO_AUTO = _concrete_to_auto()
 
 
 def get_hf_auto_model(
-    model: Type[PreTrainedModel],
-) -> Type[modeling_auto._BaseAutoModelClass]:
+    model: type[PreTrainedModel],
+) -> type[modeling_auto._BaseAutoModelClass]:
     """
     For a given HuggingFace model class, this function returns the corresponding
     HF AutoModel class, if there is one.
@@ -157,14 +157,12 @@ def get_hf_auto_model(
         # models using vanilla HF transformers classes
         try:
             candidates = _CONCRETE_TO_AUTO[model]
-        except KeyError:
+        except KeyError as e:
             raise ModelNotFoundError(
                 f"Could not find HF AutoModel matching: {model.__name__}"
-            )
+            ) from e
         if not candidates:
-            raise ModelNotFoundError(
-                f"Could not find HF AutoModel matching: {model.__name__}"
-            )
+            raise ModelNotFoundError(f"Could not find HF AutoModel matching: {model.__name__}")
         prefix_len = len("AutoModel")
         best_matches = filter(
             lambda cls: model.__name__.endswith(cls.__name__[prefix_len:]), candidates
@@ -212,18 +210,16 @@ _AUTO_MODEL_TO_OUTPUT = {
 
 
 def get_output_for_auto_model(
-    model: Type[modeling_auto._BaseAutoModelClass],
-) -> Type[modeling_outputs.ModelOutput]:
+    model: type[modeling_auto._BaseAutoModelClass],
+) -> type[modeling_outputs.ModelOutput]:
     """
     For a given HF AutoModel class, this function returns the corresponding
     transformers ModelOutput class, if there is one.
     """
     try:
         return _AUTO_MODEL_TO_OUTPUT[model]
-    except KeyError:
-        raise ModelNotFoundError(
-            f"Could not find ModelOutput matching: {model.__name__}"
-        )
+    except KeyError as e:
+        raise ModelNotFoundError(f"Could not find ModelOutput matching: {model.__name__}") from e
 
 
 # https://github.com/huggingface/exporters/blob/7f82edfcda2fe39790f93ba5a9500866709fc71b/src/exporters/coreml/config.py#L704
@@ -238,12 +234,12 @@ _CLASSIFIER_TASKS = {
 _AUTOMODELS_TO_TASKS = {v: k for k, v in FeaturesManager._TASKS_TO_AUTOMODELS.items()}
 
 
-def get_task(model: Type[PreTrainedModel]) -> str:
+def get_task(model: type[PreTrainedModel]) -> str:
     automodel = get_hf_auto_model(model)
     return _AUTOMODELS_TO_TASKS[automodel]
 
 
-def is_classifier(model: Type[PreTrainedModel]):
+def is_classifier(model: type[PreTrainedModel]):
     """
     Sadly there is no simple way to determine if a model is a classifier or not.
     This heuristic is borrowed from huggingface `exporters`.

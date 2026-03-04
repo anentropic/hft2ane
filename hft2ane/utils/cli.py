@@ -1,7 +1,7 @@
 from argparse import ArgumentParser, Namespace
 from contextlib import contextmanager
 
-from beaupy.spinners import Spinner, DOTS
+from beaupy.spinners import DOTS, Spinner
 
 
 @contextmanager

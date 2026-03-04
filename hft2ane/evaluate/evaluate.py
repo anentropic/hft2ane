@@ -9,7 +9,7 @@ import coremltools as ct
 import numpy as np
 import torch
 from ane_transformers.testing_utils import compute_psnr
-from asitop.utils import run_powermetrics_process, parse_powermetrics
+from asitop.utils import parse_powermetrics, run_powermetrics_process
 from transformers.modeling_utils import PreTrainedModel
 
 logger = logging.getLogger(__name__)
@@ -22,7 +22,7 @@ def _normalise_inputs(inputs: dict[str, torch.Tensor]) -> dict[str, np.ndarray]:
 
     NOTE: assumes that the input is a list an not a scalar value.
     """
-    return {
+    return {  # pyright: ignore[reportReturnType]
         name: tensor.numpy().astype(np.int32) if tensor.dtype == torch.int64 else tensor
         for name, tensor in inputs.items()
     }
@@ -79,7 +79,7 @@ def _values_agree(baseline: np.ndarray, coreml: np.ndarray, rtol: float) -> bool
         return False
     if np.issubdtype(baseline.dtype, np.floating):
         return np.allclose(baseline, coreml, rtol=rtol)
-    return bool(np.alltrue(baseline == coreml))
+    return bool(np.all(baseline == coreml))
 
 
 @dataclass
@@ -145,7 +145,7 @@ def sanity_check(
         peak_snr_passed = peak_signal_to_noise_ratio > min_snr
 
         if not (values_match and peak_snr_passed):
-            disagreements[(baseline_name, coreml_name)] = Disagreement(
+            disagreements[(baseline_name, coreml_name)] = Disagreement(  # pyright: ignore[reportArgumentType]
                 values_match=values_match,
                 peak_snr_passed=peak_snr_passed,
                 min_snr=min_snr,
@@ -157,7 +157,7 @@ def sanity_check(
     return (not disagreements), disagreements
 
 
-def _asitop_collector(conn: mp.connection.Connection, interval: int) -> None:
+def _asitop_collector(conn: mp.connection.Connection, interval: int) -> None:  # pyright: ignore[reportAttributeAccessIssue]
     """
     Collect ANE power metrics from `powermetrics` and send them to the parent process.
     `interval` is the interval in milliseconds between each reading.
@@ -171,16 +171,12 @@ def _asitop_collector(conn: mp.connection.Connection, interval: int) -> None:
             time.sleep(0.1)
             result = parse_powermetrics(timecode=timecode)
         metrics = result[0]
-        logger.debug(
-            f"asitop_collector subprocess sending ANE reading: {metrics['ane_W']}"
-        )
+        logger.debug(f"asitop_collector subprocess sending ANE reading: {metrics['ane_W']}")
         conn.send(metrics["ane_W"])
         time.sleep(interval / 1000)
 
     powermetrics_process = run_powermetrics_process(timecode, interval=interval)
-    logger.debug(
-        f"asitop_collector subprocess started with PID {powermetrics_process.pid}."
-    )
+    logger.debug(f"asitop_collector subprocess started with PID {powermetrics_process.pid}.")
     with powermetrics_process:
         # send a baseline reading
         logger.debug("asitop_collector subprocess sending baseline reading...")
@@ -227,9 +223,7 @@ def confirm_ane_via_powermetrics(
     else:
         p.terminate()
         p.join()
-        raise RuntimeError(
-            f"asitop_collector subprocess did not respond within {timeout} seconds."
-        )
+        raise RuntimeError(f"asitop_collector subprocess did not respond within {timeout} seconds.")
 
     # typically nothing is using the ANE, if it's in use we can't measure our model
     if baseline_ane != 0:
@@ -261,12 +255,8 @@ def _measure_ane_speedup(
     dummy_inputs: dict[str, np.ndarray],
     iterations: int = 100,
 ) -> float:
-    ane_result = timeit.timeit(
-        lambda: ane_model.predict(dummy_inputs), number=iterations
-    )
-    non_result = timeit.timeit(
-        lambda: non_model.predict(dummy_inputs), number=iterations
-    )
+    ane_result = timeit.timeit(lambda: ane_model.predict(dummy_inputs), number=iterations)
+    non_result = timeit.timeit(lambda: non_model.predict(dummy_inputs), number=iterations)
     # >1 is a speedup, larger values are better:
     return non_result / ane_result
 
@@ -277,9 +267,7 @@ def measure_ane_speedup(
     iterations: int = 100,
 ) -> float:
     ane_model = ct.models.MLModel(mlpackage_path, compute_units=ct.ComputeUnit.ALL)
-    non_model = ct.models.MLModel(
-        mlpackage_path, compute_units=ct.ComputeUnit.CPU_AND_GPU
-    )
+    non_model = ct.models.MLModel(mlpackage_path, compute_units=ct.ComputeUnit.CPU_AND_GPU)
     return _measure_ane_speedup(ane_model, non_model, dummy_inputs, iterations)
 
 
@@ -290,7 +278,5 @@ def measure_ane_speedup_from_converted(
 ) -> float:
     assert ane_model.compute_unit in (ct.ComputeUnit.ALL, ct.ComputeUnit.CPU_AND_NE)
     assert ane_model.package_path
-    non_model = ct.models.MLModel(
-        ane_model.package_path, compute_units=ct.ComputeUnit.CPU_AND_GPU
-    )
+    non_model = ct.models.MLModel(ane_model.package_path, compute_units=ct.ComputeUnit.CPU_AND_GPU)
     return _measure_ane_speedup(ane_model, non_model, dummy_inputs, iterations)

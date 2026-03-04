@@ -1,10 +1,11 @@
+import contextlib
 import os
-from typing import Any, Type, Union
+from typing import Any
 from warnings import warn
 
-import torch
 import coremltools as ct
 import numpy as np
+import torch
 from exporters.coreml.config import CoreMLConfig
 from exporters.coreml.convert import export
 from exporters.coreml.features import FeaturesManager
@@ -16,11 +17,9 @@ from transformers.modeling_utils import PreTrainedModel
 from transformers.models.auto.modeling_auto import _BaseAutoModelClass
 from transformers.processing_utils import ProcessorMixin
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
-from transformers.onnx.utils import get_preprocessor
 
 from hft2ane.mappings import get_hft2ane_model
 from hft2ane.utils.introspection import model_config
-
 
 """
 This is adapted from the method here:
@@ -40,9 +39,9 @@ from the model's HF repo (as opposed to only the `transformers` package)
 """
 
 
-ModelT = Union[Type[PreTrainedModel], Type[_BaseAutoModelClass]]
+ModelT = type[PreTrainedModel] | type[_BaseAutoModelClass]
 
-PreprocessorT = Union[PreTrainedTokenizerBase, FeatureExtractionMixin, ProcessorMixin]
+PreprocessorT = PreTrainedTokenizerBase | FeatureExtractionMixin | ProcessorMixin
 
 
 METADATA_MODEL_NAME_KEY = "com.github.anentropic.hft2ane.model"
@@ -127,14 +126,12 @@ def _set_metadata(
             "Unable to set author metadata."
         )
     else:
-        try:
+        with contextlib.suppress(AttributeError, KeyError):
             mlmodel.license = hfinfo.cardData["license"]
-        except (AttributeError, KeyError):
-            pass
         mlmodel.author = hfinfo.author or "<via Hugging Face>"
         mlmodel.version = hfinfo.sha
         mlmodel.short_description = (
-            f"{hfinfo.modelId} re-implemented using hft2ane "
+            f"{hfinfo.modelId} re-implemented using hft2ane "  # pyright: ignore[reportAttributeAccessIssue]
             "for compatibility with execution on Neural Engine."
         )
     mlmodel.user_defined_metadata[METADATA_MODEL_NAME_KEY] = model_name
@@ -170,7 +167,13 @@ def hf_to_coreml(
     # Instantiate the appropriate preprocessor
     preprocessor = None
     if preprocessor_name == "auto":
-        preprocessor = get_preprocessor(model_name)
+        try:
+            preprocessor = AutoTokenizer.from_pretrained(model_name)
+        except (OSError, KeyError):
+            try:
+                preprocessor = AutoFeatureExtractor.from_pretrained(model_name)
+            except (OSError, KeyError):
+                preprocessor = AutoProcessor.from_pretrained(model_name)
     elif preprocessor_name == "tokenizer":
         preprocessor = AutoTokenizer.from_pretrained(model_name)
     elif preprocessor_name == "feature_extractor":
@@ -179,9 +182,7 @@ def hf_to_coreml(
         preprocessor = AutoProcessor.from_pretrained(model_name)
 
     if not preprocessor:
-        raise ValueError(
-            f"Unknown preprocessor type '{preprocessor_name}' for '{model_name}'"
-        )
+        raise ValueError(f"Unknown preprocessor type '{preprocessor_name}' for '{model_name}'")
 
     converted = export(
         preprocessor,
@@ -193,7 +194,7 @@ def hf_to_coreml(
     # (but it does set input/output descriptions and classifier config)
     _set_metadata(
         converted,
-        model_name,
+        model_name,  # pyright: ignore[reportArgumentType]
         hft2ane_model.__class__.__name__,
         coreml_config.sequenceLength,
     )
@@ -257,7 +258,7 @@ def to_coreml_internal(
     assert isinstance(mlmodel, ct.models.MLModel)
 
     # (it's a shame we can't do this in the convert call above)
-    _set_metadata(mlmodel, baseline_model.name_or_path, model_cls_name)
+    _set_metadata(mlmodel, baseline_model.name_or_path, model_cls_name)  # pyright: ignore[reportArgumentType]
 
     # workaround for https://github.com/apple/coremltools/issues/1680
     ct.models.MLModel(
@@ -272,7 +273,7 @@ def to_coreml_internal(
 
 def to_coreml(
     model_name: str,
-    model_cls: Type[PreTrainedModel],
+    model_cls: type[PreTrainedModel],
     out_path: str,
     compute_units: ct.ComputeUnit = ct.ComputeUnit.ALL,
 ) -> ct.models.MLModel:

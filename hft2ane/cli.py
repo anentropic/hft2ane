@@ -2,43 +2,42 @@ import argparse
 import importlib
 import os
 import warnings
+from collections.abc import Collection
 from contextlib import contextmanager
-from typing import Collection
 
 import coremltools as ct
 import transformers
 from art import text2art
-from beaupy import confirm, prompt, select, select_multiple, Config, Abort
+from beaupy import Abort, Config, confirm, prompt, select, select_multiple
 from coremltools import ComputeUnit
 from exporters.coreml.config import CoreMLConfig
+from exporters.coreml.features import FeaturesManager
 from exporters.coreml.validate import validate_model_outputs
 from huggingface_hub import model_info
 from huggingface_hub.utils import RepositoryNotFoundError
 from rich import print
 from rich_argparse import RichHelpFormatter
 from transformers.modeling_utils import PreTrainedModel
+from transformers.onnx.utils import get_preprocessor
 from transformers.utils.generic import TensorType
 
-from hft2ane.exceptions import ModelNotFoundError
-from exporters.coreml.features import FeaturesManager
-from hft2ane.mappings import get_hft2ane_model_names, get_task
 from hft2ane.convert.convert import (
+    METADATA_MODEL_CLS_KEY,
+    METADATA_MODEL_NAME_KEY,
+    METADATA_MODEL_SEQ_LEN_KEY,
     PreprocessorT,
     get_baseline_model,
     get_models_for_conversion,
     hf_to_coreml,
-    METADATA_MODEL_NAME_KEY,
-    METADATA_MODEL_CLS_KEY,
-    METADATA_MODEL_SEQ_LEN_KEY,
 )
-from transformers.onnx.utils import get_preprocessor
 from hft2ane.evaluate.evaluate import (
     confirm_ane_via_powermetrics,
     get_dummy_inputs,
     measure_ane_speedup_from_converted,
 )
+from hft2ane.exceptions import ModelNotFoundError
+from hft2ane.mappings import get_hft2ane_model_names, get_task
 from hft2ane.utils.cli import argument, spinner
-
 
 COMPUTE_UNIT_CHOICES = tuple(cu.name for cu in ComputeUnit)
 
@@ -80,10 +79,10 @@ def _get_model_cls(model_cls_name: str):
 
     try:
         model_cls = getattr(module, model_cls_name)
-    except AttributeError:
+    except AttributeError as e:
         raise ModelNotFoundError(
             f"Could not find model class '{model_cls_name}' in module '{module.__name__}'"
-        )
+        ) from e
     if not issubclass(model_cls, PreTrainedModel):
         warnings.warn(
             f"Model class '{module.__name__}.{model_cls_name}' does not inherit from "
@@ -103,9 +102,7 @@ def _get_model_cls_name_options(
             raw_options.append(name)
             if tick:
                 ticked_indices.append(i)
-                name = (
-                    f"[bold]{name}[/bold] (recommended by model.config.architectures)"
-                )
+                name = f"[bold]{name}[/bold] (recommended by model.config.architectures)"
             options.append(name)
     return raw_options, options, ticked_indices
 
@@ -139,7 +136,7 @@ def load_models(
     for i, model_cls_name in enumerate(model_cls_names):
         model_cls = _get_model_cls(model_cls_name)
 
-        with spinner(f"({i+1}) Loading '{model_name}' as {model_cls_name}..."):
+        with spinner(f"({i + 1}) Loading '{model_name}' as {model_cls_name}..."):
             base_model, hft2ane_model = get_models_for_conversion(model_name, model_cls)
 
         model_map[model_cls_name] = (base_model, hft2ane_model)
@@ -163,7 +160,7 @@ def get_out_paths(
             pkg_names = []
             for i, model_cls_name in enumerate(model_cls_names):
                 pkg_name = prompt(
-                    f"({i+1}) Filename for converted '{model_cls_name}' model: ",
+                    f"({i + 1}) Filename for converted '{model_cls_name}' model: ",
                     initial_value=f"{model_cls_name}.mlpackage",
                     validator=lambda m: m.endswith(".mlpackage"),
                 )
@@ -228,12 +225,8 @@ def convert(args: argparse.Namespace):
 
     try:
         model_name, model_map = load_models(args.model_name, args.model_cls)
-        out_paths = get_out_paths(
-            args.out_path, args.out_dir, args.pkg_name, model_map.keys()
-        )
-        fail_on_sanity_check, confirm_ane = get_checks(
-            args.fail_on_sanity_check, args.confirm_ane
-        )
+        out_paths = get_out_paths(args.out_path, args.out_dir, args.pkg_name, model_map.keys())
+        fail_on_sanity_check, confirm_ane = get_checks(args.fail_on_sanity_check, args.confirm_ane)
     except (Abort, KeyboardInterrupt):
         print("\n[magenta]Goodbye!")
         print("\n" + BYLINE)
@@ -252,7 +245,7 @@ def convert(args: argparse.Namespace):
         task = get_task(base_model.__class__)
 
         with noop(
-            f"({i+1}) Converting '{model_name}' as {model_cls_name}\n"
+            f"({i + 1}) Converting '{model_name}' as {model_cls_name}\n"
             "  to CoreML .mlpackage format...\n",
         ):
             converted, preprocessor, config = hf_to_coreml(
@@ -298,9 +291,7 @@ def verify(args: argparse.Namespace):
     model_cls_name = coreml_model.user_defined_metadata.get(METADATA_MODEL_CLS_KEY)
 
     if not model_name:
-        print(
-            "> ⚠️  No model name found in mlpackage metadata. Was it exported via hft2ane?"
-        )
+        print("> ⚠️  No model name found in mlpackage metadata. Was it exported via hft2ane?")
     try:
         while not model_name:
             model_name = prompt(
@@ -309,16 +300,14 @@ def verify(args: argparse.Namespace):
             )
 
         if not model_cls_name:
-            raw_options, options, ticked_indices = _get_model_cls_name_options(
-                model_name
-            )
+            raw_options, options, ticked_indices = _get_model_cls_name_options(model_name)
             print("Select the model class to use as a base for conversion:")
             index = select(
                 options=options,
                 cursor_index=ticked_indices[0],
                 return_index=True,
             )
-            model_cls_name = raw_options[index]
+            model_cls_name = raw_options[index]  # pyright: ignore[reportCallIssue, reportArgumentType]
             # TODO: add 'other' option to allow enter a custom import path
     except (Abort, KeyboardInterrupt):
         print("\n[magenta]Goodbye!")
@@ -379,11 +368,9 @@ def _verify(
         )
     except ValueError as e:
         if fail_on_sanity_check:
-            raise SanityCheckError(
-                f"Sanity check failed for '{pkg_path}'.\n" f"Error: {e!r}"
-            )
+            raise SanityCheckError(f"Sanity check failed for '{pkg_path}'.\nError: {e!r}") from e
         else:
-            print(f"> 🛑 Sanity check failed for '{pkg_path}'.\n" f"  📊 Error: {e!r}")
+            print(f"> 🛑 Sanity check failed for '{pkg_path}'.\n  📊 Error: {e!r}")
     else:
         # `validate_model_outputs` does its own logging
         pass
@@ -407,7 +394,8 @@ def _verify(
 
     with spinner("Measuring inference speedup vs ANE compute-unit disabled..."):
         dummy_inputs = config.generate_dummy_inputs(
-            preprocessor=preprocessor, framework=TensorType.PYTORCH
+            preprocessor=preprocessor,  # pyright: ignore[reportArgumentType]
+            framework=TensorType.PYTORCH,
         )
         coreml_inputs = {key: val[1] for key, val in dummy_inputs.items()}
         speedup = measure_ane_speedup_from_converted(converted, coreml_inputs)
@@ -418,17 +406,13 @@ def _verify(
             "an issue with the model architecture exported by hft2ane."
         )
     else:
-        print(
-            f"> ✅ [bold]{speedup:.2f}x[/bold] ANE speedup measured for '{pkg_path}'.\n"
-        )
+        print(f"> ✅ [bold]{speedup:.2f}x[/bold] ANE speedup measured for '{pkg_path}'.\n")
 
     if confirm_ane:
         with spinner(
             f"Attempting to confirm Neural Engine execution (via powermetrics) for '{pkg_path}'..."
         ):
-            confirmed = confirm_ane_via_powermetrics(
-                converted, get_dummy_inputs(base_model)
-            )
+            confirmed = confirm_ane_via_powermetrics(converted, get_dummy_inputs(base_model))
         if confirmed:
             print(f"> ✅ Confirmed Neural Engine execution for '{pkg_path}'.")
         else:
@@ -500,9 +484,7 @@ if __name__ == "__main__":
             "and --out-dir is also specified, the path(s) will be relative to out-dir."
         ),
     )
-    convert_parser.add_argument(
-        *arg_fail_on_sanity_check[0], **arg_fail_on_sanity_check[1]
-    )
+    convert_parser.add_argument(*arg_fail_on_sanity_check[0], **arg_fail_on_sanity_check[1])
     convert_parser.add_argument(*arg_confirm_ane[0], **arg_confirm_ane[1])
     convert_parser.set_defaults(func=convert)
 
@@ -517,9 +499,7 @@ if __name__ == "__main__":
         nargs="?",
         help="Path to a hft2ane-converted CoreML .mlpackage",
     )
-    verify_parser.add_argument(
-        *arg_fail_on_sanity_check[0], **arg_fail_on_sanity_check[1]
-    )
+    verify_parser.add_argument(*arg_fail_on_sanity_check[0], **arg_fail_on_sanity_check[1])
     verify_parser.add_argument(*arg_confirm_ane[0], **arg_confirm_ane[1])
     verify_parser.set_defaults(func=verify)
 

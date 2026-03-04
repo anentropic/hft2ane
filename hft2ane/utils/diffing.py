@@ -66,11 +66,9 @@ def model_diff(auto_cls, model_a: str, model_b: str, diff_formatter=diff) -> str
     return diff_formatter(str(a), str(b))
 
 
-def file_diff(
-    path_a: str, path_b: str, preprocess_b=lambda a: a, diff_formatter=diff
-) -> str:
-    with open(path_a, "r") as f:
+def file_diff(path_a: str, path_b: str, preprocess_b=lambda a: a, diff_formatter=diff) -> str:
+    with open(path_a) as f:
         a = f.read()
-    with open(path_b, "r") as f:
+    with open(path_b) as f:
         b = preprocess_b(f.read())
     return diff_formatter(a, b)
