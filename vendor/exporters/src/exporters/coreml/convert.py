@@ -26,8 +26,11 @@ import numpy as np
 from transformers.utils import (
     TensorType,
     is_torch_available,
-    is_tf_available,
 )
+
+
+def is_tf_available():
+    return False
 from .config import CoreMLConfig
 from ..utils import logging
 
