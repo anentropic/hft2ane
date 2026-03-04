@@ -1,0 +1,70 @@
+name: Quality
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Quality gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: true
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+          python-version: "3.13"
+
+      - name: Sync dev dependencies
+        run: uv sync --only-group dev --locked
+
+      - name: Lint
+        run: uv run ruff check hft2ane tests
+
+      - name: Format check
+        run: uv run ruff format --check hft2ane tests
+
+      - name: Type check
+        run: uv run basedpyright
+
+      - name: Cache pruning
+        if: always()
+        run: uv cache prune --ci
+
+  tests:
+    name: Tests
+    runs-on: macos-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: true
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+          python-version: "3.13"
+
+      - name: Sync dependencies
+        run: uv sync --locked
+
+      - name: Tests
+        run: uv run pytest -m "not convert"
+
+      - name: Cache pruning
+        if: always()
+        run: uv cache prune --ci

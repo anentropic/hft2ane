@@ -1,28 +1,29 @@
+# pyright: reportOptionalCall=false, reportAttributeAccessIssue=false, reportArgumentType=false
 import warnings
+from collections.abc import Iterator
 from contextlib import contextmanager
 from types import NoneType
-from typing import Any, Iterator, Union, get_type_hints, get_args, Type, TypeGuard
+from typing import Any, TypeGuard, get_args, get_type_hints
 
 import torch.nn
 from transformers import PreTrainedModel
-from transformers.utils.fx import symbolic_trace
 from transformers.modeling_outputs import ModelOutput
+from transformers.utils.fx import symbolic_trace
 
 from hft2ane.mappings import get_hf_auto_model, get_output_for_auto_model
 
-
-TensorT = Union[
-    torch.Tensor,
-    torch.DoubleTensor,
-    torch.FloatTensor,
-    torch.LongTensor,
-    torch.IntTensor,
-    torch.ShortTensor,
-    torch.HalfTensor,
-    torch.CharTensor,
-    torch.ByteTensor,
-    torch.BoolTensor,
-]
+TensorT = (
+    torch.Tensor
+    | torch.DoubleTensor
+    | torch.FloatTensor
+    | torch.LongTensor
+    | torch.IntTensor
+    | torch.ShortTensor
+    | torch.HalfTensor
+    | torch.CharTensor
+    | torch.ByteTensor
+    | torch.BoolTensor
+)
 
 
 @contextmanager
@@ -75,7 +76,7 @@ def _flatten_type_args(type_args: tuple[object, ...]) -> Iterator[object]:
 
 
 def _fields_from_model_output(
-    model_output: Type[ModelOutput],
+    model_output: type[ModelOutput],
 ) -> tuple[dict[str, TensorT], dict[str, TensorT]]:
     required_fields = {}
     optional_fields = {}
@@ -152,8 +153,7 @@ def get_input_and_output_key_names(
             return _get_by_trace(model)
         except Exception as e:
             warnings.warn(
-                f"Failed to get output names via tracing: {e}. "
-                "Falling back to using model config."
+                f"Failed to get output names via tracing: {e}. Falling back to using model config."
             )
     try:
         return _get_by_model_outputs(model)
@@ -161,8 +161,7 @@ def get_input_and_output_key_names(
         # TODO: probably we should just use this in all cases as it is guaranteed to be
         # accurate. Slow for large models, but we already had to instantiate the model.
         warnings.warn(
-            f"Failed to get output names via model outputs: {e}. "
-            "Falling back to running model."
+            f"Failed to get output names via model outputs: {e}. Falling back to running model."
         )
         with model_config(model, return_dict=True):
             result = model(**model.dummy_inputs)

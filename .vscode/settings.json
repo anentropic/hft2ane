@@ -1,18 +1,14 @@
 {
     "python.analysis.autoImportCompletions": true,
-    "python.testing.pytestArgs": [
-        "tests"
-    ],
+    "python.testing.pytestArgs": ["tests"],
     "python.testing.unittestEnabled": false,
-    "python.testing.pytestEnabled": true
-    ,
-    "files.exclude": {
-        "**/__pycache__": true
-    },
-    "search.exclude": {
-        "**/__pycache__": true
-    },
-    "files.watcherExclude": {
-        "**/__pycache__": true
-    }
+    "python.testing.pytestEnabled": true,
+    "python.analysis.typeCheckingMode": "standard",
+    "python.analysis.extraPaths": [
+        "vendor/ml-ane-transformers",
+        "vendor/exporters/src"
+    ],
+    "files.exclude": { "**/__pycache__": true },
+    "search.exclude": { "**/__pycache__": true, "vendor/**": true },
+    "files.watcherExclude": { "**/__pycache__": true }
 }

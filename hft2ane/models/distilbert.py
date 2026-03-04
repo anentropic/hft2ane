@@ -12,11 +12,10 @@ from hft2ane.models._common import (
     EPS,
     WARN_MSG_FOR_DICT_RETURN,
     WARN_MSG_FOR_TRAINING_ATTEMPT,
+    ANEMixin,
     correct_for_bias_scale_order_inversion,
     last_conv2d_reshape,
-    ANEMixin,
 )
-
 
 MODEL_TYPE = "distilbert"
 
@@ -48,117 +47,73 @@ class Embeddings(modeling_distilbert.Embeddings):
 
     def __init__(self, config):
         super().__init__(config)
-        setattr(self, "LayerNorm", LayerNormANE(config.dim, eps=EPS))
+        self.LayerNorm = LayerNormANE(config.dim, eps=EPS)
 
 
-class MultiHeadSelfAttention(modeling_distilbert.MultiHeadSelfAttention):
-    """MultiHeadSelfAttention module optimized for Apple Neural Engine"""
+class DistilBertSelfAttention(modeling_distilbert.DistilBertSelfAttention):
+    """DistilBertSelfAttention module optimized for Apple Neural Engine"""
 
     def __init__(self, config):
         super().__init__(config)
 
-        setattr(
-            self,
-            "q_lin",
-            nn.Conv2d(
-                in_channels=config.dim,
-                out_channels=config.dim,
-                kernel_size=1,
-            ),
-        )
+        self.q_lin = nn.Conv2d(in_channels=config.dim, out_channels=config.dim, kernel_size=1)
 
-        setattr(
-            self,
-            "k_lin",
-            nn.Conv2d(
-                in_channels=config.dim,
-                out_channels=config.dim,
-                kernel_size=1,
-            ),
-        )
+        self.k_lin = nn.Conv2d(in_channels=config.dim, out_channels=config.dim, kernel_size=1)
 
-        setattr(
-            self,
-            "v_lin",
-            nn.Conv2d(
-                in_channels=config.dim,
-                out_channels=config.dim,
-                kernel_size=1,
-            ),
-        )
+        self.v_lin = nn.Conv2d(in_channels=config.dim, out_channels=config.dim, kernel_size=1)
 
-        setattr(
-            self,
-            "out_lin",
-            nn.Conv2d(
-                in_channels=config.dim,
-                out_channels=config.dim,
-                kernel_size=1,
-            ),
-        )
+        self.out_lin = nn.Conv2d(in_channels=config.dim, out_channels=config.dim, kernel_size=1)
 
     def prune_heads(self, heads):
         raise NotImplementedError
 
-    def forward(self, query, key, value, mask, head_mask=None, output_attentions=False):
+    def forward(self, hidden_states, attention_mask=None, **kwargs):
         """
         Parameters:
-            query: torch.tensor(bs, dim, 1, seq_length)
-            key: torch.tensor(bs, dim, 1, seq_length)
-            value: torch.tensor(bs, dim, 1, seq_length)
-            mask: torch.tensor(bs, seq_length) or torch.tensor(bs, seq_length, 1, 1)
+            hidden_states: torch.tensor(bs, dim, 1, seq_length)
+            attention_mask: torch.tensor(bs, seq_length) or torch.tensor(bs, seq_length, 1, 1)
 
         Returns:
             weights: torch.tensor(bs, n_heads, seq_length, seq_length) Attention weights context: torch.tensor(bs,
             dim, 1, seq_length) Contextualized layer. Optional: only if `output_attentions=True`
         """
-        # Parse tensor shapes for source and target sequences
-        assert (
-            len(query.size()) == 4 and len(key.size()) == 4 and len(value.size()) == 4
-        )
+        output_attentions = kwargs.get("output_attentions", False)
 
-        bs, dim, dummy, seqlen = query.size()
-        # assert seqlen == key.size(3) and seqlen == value.size(3)
-        # assert dim == self.dim
-        # assert dummy == 1
+        # Parse tensor shapes for source and target sequences
+        assert len(hidden_states.size()) == 4
+
+        bs, dim, dummy, seqlen = hidden_states.size()
 
         # Project q, k and v
-        q = self.q_lin(query)
-        k = self.k_lin(key)
-        v = self.v_lin(value)
+        q = self.q_lin(hidden_states)
+        k = self.k_lin(hidden_states)
+        v = self.v_lin(hidden_states)
 
         # Validate mask
-        if mask is not None:
+        if attention_mask is not None:
             expected_mask_shape = [bs, seqlen, 1, 1]
-            if mask.dtype == torch.bool:
-                mask = mask.logical_not().float() * -1e4
-            elif mask.dtype == torch.int64:
-                mask = (1 - mask).float() * -1e4
-            elif mask.dtype != torch.float32:
-                raise TypeError(f"Unexpected dtype for mask: {mask.dtype}")
+            if attention_mask.dtype == torch.bool:
+                attention_mask = attention_mask.logical_not().float() * -1e4
+            elif attention_mask.dtype == torch.int64:
+                attention_mask = (1 - attention_mask).float() * -1e4
+            elif attention_mask.dtype != torch.float32:
+                raise TypeError(f"Unexpected dtype for mask: {attention_mask.dtype}")
 
-            if len(mask.size()) == 2:
-                mask = mask.unsqueeze(2).unsqueeze(2)
+            if len(attention_mask.size()) == 2:
+                attention_mask = attention_mask.unsqueeze(2).unsqueeze(2)
 
-            if list(mask.size()) != expected_mask_shape:
+            if list(attention_mask.size()) != expected_mask_shape:
                 raise RuntimeError(
-                    f"Invalid shape for `mask` (Expected {expected_mask_shape}, got {list(mask.size())}"
+                    f"Invalid shape for `mask` (Expected {expected_mask_shape}, got {list(attention_mask.size())}"
                 )
-
-        if head_mask is not None:
-            raise NotImplementedError
 
         # Compute scaled dot-product attention
         dim_per_head = self.dim // self.n_heads
-        mh_q = q.split(
-            dim_per_head, dim=1
-        )  # (bs, dim_per_head, 1, max_seq_length) * n_heads
+        mh_q = q.split(dim_per_head, dim=1)  # (bs, dim_per_head, 1, max_seq_length) * n_heads
         mh_k = k.transpose(1, 3).split(
             dim_per_head, dim=3
         )  # (bs, max_seq_length, 1, dim_per_head) * n_heads
-        mh_v = v.split(
-            dim_per_head, dim=1
-        )  # (bs, dim_per_head, 1, max_seq_length) * n_heads
+        mh_v = v.split(dim_per_head, dim=1)  # (bs, dim_per_head, 1, max_seq_length) * n_heads
 
         normalize_factor = float(dim_per_head) ** -0.5
         attn_weights = [
@@ -166,16 +121,15 @@ class MultiHeadSelfAttention(modeling_distilbert.MultiHeadSelfAttention):
             for qi, ki in zip(mh_q, mh_k)
         ]  # (bs, max_seq_length, 1, max_seq_length) * n_heads
 
-        if mask is not None:
+        if attention_mask is not None:
             for head_idx in range(self.n_heads):
-                attn_weights[head_idx] = attn_weights[head_idx] + mask
+                attn_weights[head_idx] = attn_weights[head_idx] + attention_mask
 
         attn_weights = [
             aw.softmax(dim=1) for aw in attn_weights
         ]  # (bs, max_seq_length, 1, max_seq_length) * n_heads
         attn = [
-            torch.einsum("bkhq,bchk->bchq", wi, vi)
-            for wi, vi in zip(attn_weights, mh_v)
+            torch.einsum("bkhq,bchk->bchq", wi, vi) for wi, vi in zip(attn_weights, mh_v)
         ]  # (bs, dim_per_head, 1, max_seq_length) * n_heads
 
         attn = torch.cat(attn, dim=1)  # (bs, dim, 1, max_seq_length)
@@ -183,7 +137,7 @@ class MultiHeadSelfAttention(modeling_distilbert.MultiHeadSelfAttention):
         attn = self.out_lin(attn)
 
         if output_attentions:
-            return attn, attn_weights.cat(dim=2)
+            return attn, torch.cat(attn_weights, dim=2)
         else:
             return (attn,)
 
@@ -195,93 +149,109 @@ class FFN(modeling_distilbert.FFN):
         super().__init__(config)
         self.seq_len_dim = 3
 
-        setattr(
-            self,
-            "lin1",
-            nn.Conv2d(
-                in_channels=config.dim,
-                out_channels=config.hidden_dim,
-                kernel_size=1,
-            ),
-        )
+        self.lin1 = nn.Conv2d(in_channels=config.dim, out_channels=config.hidden_dim, kernel_size=1)
 
-        setattr(
-            self,
-            "lin2",
-            nn.Conv2d(
-                in_channels=config.hidden_dim,
-                out_channels=config.dim,
-                kernel_size=1,
-            ),
-        )
+        self.lin2 = nn.Conv2d(in_channels=config.hidden_dim, out_channels=config.dim, kernel_size=1)
 
 
 class TransformerBlock(modeling_distilbert.TransformerBlock):
     def __init__(self, config):
         super().__init__(config)
-        setattr(self, "attention", MultiHeadSelfAttention(config))
-        setattr(self, "sa_layer_norm", LayerNormANE(config.dim, eps=EPS))
-        setattr(self, "ffn", FFN(config))
-        setattr(self, "output_layer_norm", LayerNormANE(config.dim, eps=EPS))
+        self.attention = DistilBertSelfAttention(config)
+        self.sa_layer_norm = LayerNormANE(config.dim, eps=EPS)
+        self.ffn = FFN(config)
+        self.output_layer_norm = LayerNormANE(config.dim, eps=EPS)
+
+    def forward(self, hidden_states, attention_mask=None, **kwargs):
+        sa_output = self.attention(hidden_states, attention_mask=attention_mask, **kwargs)
+        if isinstance(sa_output, tuple):
+            sa_output = sa_output[0]
+        sa_output = self.sa_layer_norm(sa_output + hidden_states)
+        ffn_output = self.ffn(sa_output)
+        ffn_output = self.output_layer_norm(ffn_output + sa_output)
+        return ffn_output
 
 
 class Transformer(modeling_distilbert.Transformer):
     def __init__(self, config):
         super().__init__(config)
-        setattr(
-            self,
-            "layer",
-            nn.ModuleList([TransformerBlock(config) for _ in range(config.n_layers)]),
-        )
+        self.layer = nn.ModuleList([TransformerBlock(config) for _ in range(config.n_layers)])
 
 
 class DistilBertModel(ANEDistilBertMixin, modeling_distilbert.DistilBertModel):
     def __init__(self, config):
         super().__init__(config)
-        setattr(self, "embeddings", Embeddings(config))
-        setattr(self, "transformer", Transformer(config))
+        self.embeddings = Embeddings(config)
+        self.transformer = Transformer(config)
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError
 
+    def forward(
+        self,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor, ...]:
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        if return_dict:
+            raise ValueError(WARN_MSG_FOR_DICT_RETURN)
 
-class DistilBertForMaskedLM(
-    ANEDistilBertMixin, modeling_distilbert.DistilBertForMaskedLM
-):
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        # Embeddings output is 4D (bs, dim, 1, seq_len) from LayerNormANE
+        embeddings = self.embeddings(input_ids, inputs_embeds, position_ids)
+
+        # Skip parent's create_bidirectional_mask which expects 3D embeddings but
+        # ours are 4D. Our SelfAttention handles 2D mask conversion internally.
+        transformer_output = self.transformer(
+            hidden_states=embeddings,
+            attention_mask=attention_mask,
+            **kwargs,
+        )
+
+        if not isinstance(transformer_output, tuple):
+            transformer_output = transformer_output.to_tuple()
+
+        return transformer_output
+
+
+class DistilBertForMaskedLM(ANEDistilBertMixin, modeling_distilbert.DistilBertForMaskedLM):
     def __init__(self, config):
         super().__init__(config)
         from transformers.activations import get_activation
 
-        setattr(self, "activation", get_activation(config.activation))
-        setattr(self, "distilbert", DistilBertModel(config))
-        setattr(self, "vocab_transform", nn.Conv2d(config.dim, config.dim, 1))
-        setattr(self, "vocab_layer_norm", LayerNormANE(config.dim, eps=EPS))
-        setattr(self, "vocab_projector", nn.Conv2d(config.dim, config.vocab_size, 1))
+        self.activation = get_activation(config.activation)
+        self.distilbert = DistilBertModel(config)
+        self.vocab_transform = nn.Conv2d(config.dim, config.dim, 1)
+        self.vocab_layer_norm = LayerNormANE(config.dim, eps=EPS)
+        self.vocab_projector = nn.Conv2d(config.dim, config.vocab_size, 1)
 
     def forward(
         self,
         input_ids=None,
         attention_mask=None,
-        head_mask=None,
         inputs_embeds=None,
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         if self.training or labels is not None:
             raise ValueError(WARN_MSG_FOR_TRAINING_ATTEMPT)
 
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if return_dict:
             raise ValueError(WARN_MSG_FOR_DICT_RETURN)
 
         dlbrt_output = self.distilbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -290,16 +260,10 @@ class DistilBertForMaskedLM(
         hidden_states = dlbrt_output[0]  # (bs, dim, 1, seq_len)
         prediction_logits = self.vocab_transform(hidden_states)  # (bs, dim, 1, seq_len)
         prediction_logits = self.activation(prediction_logits)  # (bs, dim, 1, seq_len)
-        prediction_logits = self.vocab_layer_norm(
-            prediction_logits
-        )  # (bs, dim, 1, seq_len)
-        prediction_logits = self.vocab_projector(
-            prediction_logits
-        )  # (bs, dim, 1, seq_len)
+        prediction_logits = self.vocab_layer_norm(prediction_logits)  # (bs, dim, 1, seq_len)
+        prediction_logits = self.vocab_projector(prediction_logits)  # (bs, dim, 1, seq_len)
         # hft2ane: tweaked here vs ane_transformers to match expected output shape
-        prediction_logits = last_conv2d_reshape(
-            prediction_logits
-        )  # (bs, dim, vocab_size)
+        prediction_logits = last_conv2d_reshape(prediction_logits)  # (bs, dim, vocab_size)
 
         output = (prediction_logits,) + dlbrt_output[1:]
         mlm_loss = None
@@ -312,34 +276,31 @@ class DistilBertForSequenceClassification(
 ):
     def __init__(self, config):
         super().__init__(config)
-        setattr(self, "distilbert", DistilBertModel(config))
-        setattr(self, "pre_classifier", nn.Conv2d(config.dim, config.dim, 1))
-        setattr(self, "classifier", nn.Conv2d(config.dim, config.num_labels, 1))
+        self.distilbert = DistilBertModel(config)
+        self.pre_classifier = nn.Conv2d(config.dim, config.dim, 1)
+        self.classifier = nn.Conv2d(config.dim, config.num_labels, 1)
 
     def forward(
         self,
         input_ids=None,
         attention_mask=None,
-        head_mask=None,
         inputs_embeds=None,
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         if labels is not None or self.training:
             raise NotImplementedError(WARN_MSG_FOR_TRAINING_ATTEMPT)
 
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if return_dict:
             raise ValueError(WARN_MSG_FOR_DICT_RETURN)
 
         distilbert_output = self.distilbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -363,34 +324,31 @@ class DistilBertForQuestionAnswering(
 ):
     def __init__(self, config):
         super().__init__(config)
-        setattr(self, "distilbert", DistilBertModel(config))
-        setattr(self, "qa_outputs", nn.Conv2d(config.dim, config.num_labels, 1))
+        self.distilbert = DistilBertModel(config)
+        self.qa_outputs = nn.Conv2d(config.dim, config.num_labels, 1)
 
     def forward(
         self,
         input_ids=None,
         attention_mask=None,
-        head_mask=None,
         inputs_embeds=None,
         start_positions=None,
         end_positions=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         if self.training or start_positions is not None or end_positions is not None:
             raise ValueError(WARN_MSG_FOR_TRAINING_ATTEMPT)
 
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if return_dict:
             raise ValueError(WARN_MSG_FOR_DICT_RETURN)
 
         distilbert_output = self.distilbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -400,15 +358,9 @@ class DistilBertForQuestionAnswering(
 
         hidden_states = self.dropout(hidden_states)  # (bs, dim, 1, max_query_len)
         logits = self.qa_outputs(hidden_states)  # (bs, 2, 1, max_query_len)
-        start_logits, end_logits = logits.split(
-            1, dim=1
-        )  # (bs, 1, 1, max_query_len) * 2
-        start_logits = (
-            start_logits.squeeze(1).squeeze(1).contiguous()
-        )  # (bs, max_query_len)
-        end_logits = (
-            end_logits.squeeze(1).squeeze(1).contiguous()
-        )  # (bs, max_query_len)
+        start_logits, end_logits = logits.split(1, dim=1)  # (bs, 1, 1, max_query_len) * 2
+        start_logits = start_logits.squeeze(1).squeeze(1).contiguous()  # (bs, max_query_len)
+        end_logits = end_logits.squeeze(1).squeeze(1).contiguous()  # (bs, max_query_len)
 
         output = (start_logits, end_logits) + distilbert_output[1:]
 
@@ -420,33 +372,30 @@ class DistilBertForTokenClassification(
 ):
     def __init__(self, config):
         super().__init__(config)
-        setattr(self, "distilbert", DistilBertModel(config))
-        setattr(self, "classifier", nn.Conv2d(config.hidden_size, config.num_labels, 1))
+        self.distilbert = DistilBertModel(config)
+        self.classifier = nn.Conv2d(config.hidden_size, config.num_labels, 1)
 
     def forward(
         self,
         input_ids=None,
         attention_mask=None,
-        head_mask=None,
         inputs_embeds=None,
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         if self.training or labels is not None:
             raise ValueError(WARN_MSG_FOR_TRAINING_ATTEMPT)
 
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if return_dict:
             raise ValueError(WARN_MSG_FOR_DICT_RETURN)
 
         outputs = self.distilbert(
             input_ids,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -467,41 +416,33 @@ class DistilBertForMultipleChoice(
 ):
     def __init__(self, config):
         super().__init__(config)
-        setattr(self, "distilbert", DistilBertModel(config))
-        setattr(self, "pre_classifier", nn.Conv2d(config.dim, config.dim, 1))
-        setattr(self, "classifier", nn.Conv2d(config.dim, 1, 1))
+        self.distilbert = DistilBertModel(config)
+        self.pre_classifier = nn.Conv2d(config.dim, config.dim, 1)
+        self.classifier = nn.Conv2d(config.dim, 1, 1)
 
     def forward(
         self,
         input_ids=None,
         attention_mask=None,
-        head_mask=None,
         inputs_embeds=None,
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         if self.training or labels is not None:
             raise ValueError(WARN_MSG_FOR_TRAINING_ATTEMPT)
 
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if return_dict:
             raise ValueError(WARN_MSG_FOR_DICT_RETURN)
 
-        num_choices = (
-            input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
-        )
+        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
-        input_ids = (
-            input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
-        )
+        input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
         attention_mask = (
-            attention_mask.view(-1, attention_mask.size(-1))
-            if attention_mask is not None
-            else None
+            attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
         )
         inputs_embeds = (
             inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
@@ -512,7 +453,6 @@ class DistilBertForMultipleChoice(
         outputs = self.distilbert(
             input_ids,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -521,9 +461,7 @@ class DistilBertForMultipleChoice(
 
         hidden_state = outputs[0]  # (bs * num_choices, dim, 1, seq_len)
         pooled_output = hidden_state[:, :, :, 0:1]  # (bs * num_choices, dim, 1, 1)
-        pooled_output = self.pre_classifier(
-            pooled_output
-        )  # (bs * num_choices, dim, 1, 1)
+        pooled_output = self.pre_classifier(pooled_output)  # (bs * num_choices, dim, 1, 1)
         pooled_output = nn.ReLU()(pooled_output)  # (bs * num_choices, dim, 1, 1)
         logits = self.classifier(pooled_output)  # (bs * num_choices, 1, 1, 1)
         logits = logits.squeeze()  # (bs * num_choices)

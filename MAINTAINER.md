@@ -48,13 +48,13 @@ Uses Apple's `powermetrics` (requires sudo) via `asitop` to measure ANE power dr
 
 ```bash
 # Collect tests (structural check — imports, no broken references)
-poetry run pytest tests/ --collect-only
+uv run pytest tests/ --collect-only
 
 # Run tests (requires macOS with coremltools for test_bert.py)
-poetry run pytest tests/
+uv run pytest tests/
 
 # Pre-commit hooks
-poetry run pre-commit run --all-files
+prek run --all-files
 ```
 
 Note: `test_bert.py` imports `coremltools` at module level so it will fail to collect on non-macOS or without `coremltools` installed. The other test files (distilbert, roberta) collect and run without it.

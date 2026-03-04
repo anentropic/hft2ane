@@ -1,35 +1,45 @@
 from collections.abc import Mapping
 
-import pytest
-
 import numpy as np
+import pytest
 import torch
 from ane_transformers.testing_utils import compute_psnr
-from transformers import (
-    AutoTokenizer,
-    BertForSequenceClassification as HF_BertForSequenceClassification,
-    BertForMaskedLM as HF_BertForMaskedLM,
-    BertForQuestionAnswering as HF_BertForQuestionAnswering,
-    BertForTokenClassification as HF_BertForTokenClassification,
-    BertForMultipleChoice as HF_BertForMultipleChoice,
-    BertForNextSentencePrediction as HF_BertForNextSentencePrediction,
-    PreTrainedTokenizer,
-)
-
-from hft2ane.models.bert import (
-    BertForSequenceClassification,
-    BertForMaskedLM,
-    BertForQuestionAnswering,
-    BertForTokenClassification,
-    BertForMultipleChoice,
-    BertForNextSentencePrediction,
-)
-from hft2ane.convert.convert import to_coreml
 from hft2ane.evaluate.evaluate import (
     get_dummy_inputs,
     measure_ane_speedup_from_converted,
 )
+from hft2ane.models.bert import (
+    BertForMaskedLM,
+    BertForMultipleChoice,
+    BertForNextSentencePrediction,
+    BertForQuestionAnswering,
+    BertForSequenceClassification,
+    BertForTokenClassification,
+)
+from transformers import (
+    AutoTokenizer,
+    PreTrainedTokenizer,
+)
+from transformers import (
+    BertForMaskedLM as HF_BertForMaskedLM,
+)
+from transformers import (
+    BertForMultipleChoice as HF_BertForMultipleChoice,
+)
+from transformers import (
+    BertForNextSentencePrediction as HF_BertForNextSentencePrediction,
+)
+from transformers import (
+    BertForQuestionAnswering as HF_BertForQuestionAnswering,
+)
+from transformers import (
+    BertForSequenceClassification as HF_BertForSequenceClassification,
+)
+from transformers import (
+    BertForTokenClassification as HF_BertForTokenClassification,
+)
 
+from tests.conftest import materialize_params
 
 TEST_MAX_SEQ_LEN = 256
 PSNR_THRESHOLD = 33
@@ -40,9 +50,7 @@ SEQUENCE_CLASSIFICATION_MODEL = (
 )
 MASKED_LM_MODEL = "bert-base-uncased"
 NSP_MODEL = "bert-base-uncased"
-QUESTION_ANSWERING_MODEL = (
-    "csarron/bert-base-uncased-squad-v1"  # deepset/bert-base-cased-squad2
-)
+QUESTION_ANSWERING_MODEL = "csarron/bert-base-uncased-squad-v1"  # deepset/bert-base-cased-squad2
 TOKEN_CLASSIFICATION_MODEL = (
     "dslim/bert-base-NER-uncased"  # dbmdz/bert-large-cased-finetuned-conll03-english
 )
@@ -129,33 +137,31 @@ MULTIPLE_CHOICE_EXAMPLES = [
 @pytest.fixture(scope="session")
 def masked_lm():
     tokenizer = AutoTokenizer.from_pretrained(MASKED_LM_MODEL)
-    hf_model = HF_BertForMaskedLM.from_pretrained(
-        MASKED_LM_MODEL, return_dict=False
-    ).eval()
-    ane_model = BertForMaskedLM.from_pretrained(
-        MASKED_LM_MODEL, return_dict=False
-    ).eval()
+    hf_model = materialize_params(
+        HF_BertForMaskedLM.from_pretrained(MASKED_LM_MODEL, return_dict=False).eval()
+    )
+    ane_model = BertForMaskedLM.from_pretrained(MASKED_LM_MODEL, return_dict=False).eval()
     return tokenizer, hf_model, ane_model
 
 
 @pytest.fixture(scope="session")
 def next_sentence_prediction():
     tokenizer = AutoTokenizer.from_pretrained(NSP_MODEL)
-    hf_model = HF_BertForNextSentencePrediction.from_pretrained(
-        NSP_MODEL, return_dict=False
-    ).eval()
-    ane_model = BertForNextSentencePrediction.from_pretrained(
-        NSP_MODEL, return_dict=False
-    ).eval()
+    hf_model = materialize_params(
+        HF_BertForNextSentencePrediction.from_pretrained(NSP_MODEL, return_dict=False).eval()
+    )
+    ane_model = BertForNextSentencePrediction.from_pretrained(NSP_MODEL, return_dict=False).eval()
     return tokenizer, hf_model, ane_model
 
 
 @pytest.fixture(scope="session")
 def sequence_classification():
     tokenizer = AutoTokenizer.from_pretrained(SEQUENCE_CLASSIFICATION_MODEL)
-    hf_model = HF_BertForSequenceClassification.from_pretrained(
-        SEQUENCE_CLASSIFICATION_MODEL, return_dict=False
-    ).eval()
+    hf_model = materialize_params(
+        HF_BertForSequenceClassification.from_pretrained(
+            SEQUENCE_CLASSIFICATION_MODEL, return_dict=False
+        ).eval()
+    )
     ane_model = BertForSequenceClassification.from_pretrained(
         SEQUENCE_CLASSIFICATION_MODEL, return_dict=False
     ).eval()
@@ -165,9 +171,11 @@ def sequence_classification():
 @pytest.fixture(scope="session")
 def question_answering():
     tokenizer = AutoTokenizer.from_pretrained(QUESTION_ANSWERING_MODEL)
-    hf_model = HF_BertForQuestionAnswering.from_pretrained(
-        QUESTION_ANSWERING_MODEL, return_dict=False
-    ).eval()
+    hf_model = materialize_params(
+        HF_BertForQuestionAnswering.from_pretrained(
+            QUESTION_ANSWERING_MODEL, return_dict=False
+        ).eval()
+    )
     ane_model = BertForQuestionAnswering.from_pretrained(
         QUESTION_ANSWERING_MODEL, return_dict=False
     ).eval()
@@ -177,9 +185,11 @@ def question_answering():
 @pytest.fixture(scope="session")
 def token_classification():
     tokenizer = AutoTokenizer.from_pretrained(TOKEN_CLASSIFICATION_MODEL)
-    hf_model = HF_BertForTokenClassification.from_pretrained(
-        TOKEN_CLASSIFICATION_MODEL, return_dict=False
-    ).eval()
+    hf_model = materialize_params(
+        HF_BertForTokenClassification.from_pretrained(
+            TOKEN_CLASSIFICATION_MODEL, return_dict=False
+        ).eval()
+    )
     ane_model = BertForTokenClassification.from_pretrained(
         TOKEN_CLASSIFICATION_MODEL, return_dict=False
     ).eval()
@@ -189,9 +199,9 @@ def token_classification():
 @pytest.fixture(scope="session")
 def multiple_choice():
     tokenizer = AutoTokenizer.from_pretrained(MULTIPLE_CHOICE_MODEL)
-    hf_model = HF_BertForMultipleChoice.from_pretrained(
-        MULTIPLE_CHOICE_MODEL, return_dict=False
-    ).eval()
+    hf_model = materialize_params(
+        HF_BertForMultipleChoice.from_pretrained(MULTIPLE_CHOICE_MODEL, return_dict=False).eval()
+    )
     ane_model = BertForMultipleChoice.from_pretrained(
         MULTIPLE_CHOICE_MODEL, return_dict=False
     ).eval()
@@ -228,9 +238,7 @@ def test_masked_lm(input_str, expected_output, masked_lm):
 
     assert ane_outputs[0].shape == hf_outputs[0].shape
 
-    peak_signal_to_noise_ratio = compute_psnr(
-        _np_probs(hf_outputs[0]), _np_probs(ane_outputs[0])
-    )
+    peak_signal_to_noise_ratio = compute_psnr(_np_probs(hf_outputs[0]), _np_probs(ane_outputs[0]))
     assert peak_signal_to_noise_ratio > PSNR_THRESHOLD
 
     def decode_masked(
@@ -266,9 +274,7 @@ def test_next_sentence_prediction(
 
     assert ane_outputs[0].shape == hf_outputs[0].shape
 
-    peak_signal_to_noise_ratio = compute_psnr(
-        _np_probs(hf_outputs[0]), _np_probs(ane_outputs[0])
-    )
+    peak_signal_to_noise_ratio = compute_psnr(_np_probs(hf_outputs[0]), _np_probs(ane_outputs[0]))
     assert peak_signal_to_noise_ratio > PSNR_THRESHOLD
 
     def decode_nsp(scores: torch.Tensor) -> bool:
@@ -307,14 +313,10 @@ def test_sequence_classification(input_str, expected_output, sequence_classifica
 
     assert ane_outputs[0].shape == hf_outputs[0].shape
 
-    peak_signal_to_noise_ratio = compute_psnr(
-        _np_probs(hf_outputs[0]), _np_probs(ane_outputs[0])
-    )
+    peak_signal_to_noise_ratio = compute_psnr(_np_probs(hf_outputs[0]), _np_probs(ane_outputs[0]))
     assert peak_signal_to_noise_ratio > PSNR_THRESHOLD
 
-    def get_class_index(
-        output_logits: torch.Tensor, id2label: dict[int, str | int]
-    ) -> str | int:
+    def get_class_index(output_logits: torch.Tensor, id2label: dict[int, str | int]) -> str | int:
         return id2label[torch.argmax(output_logits, dim=1).item()]
 
     hf_result = get_class_index(hf_outputs[0], hf_model.config.id2label)
@@ -349,9 +351,7 @@ def test_question_answering(question, expected_output, question_answering):
 
     assert ane_outputs[0].shape == hf_outputs[0].shape
 
-    peak_signal_to_noise_ratio = compute_psnr(
-        _np_probs(hf_outputs[0]), _np_probs(ane_outputs[0])
-    )
+    peak_signal_to_noise_ratio = compute_psnr(_np_probs(hf_outputs[0]), _np_probs(ane_outputs[0]))
     assert peak_signal_to_noise_ratio > PSNR_THRESHOLD
 
     def decode_qa(
@@ -362,9 +362,7 @@ def test_question_answering(question, expected_output, question_answering):
     ) -> str:
         answer_start_index = torch.argmax(start_logits)
         answer_end_index = torch.argmax(end_logits)
-        predict_answer_tokens = inputs.input_ids[
-            0, answer_start_index : answer_end_index + 1
-        ]
+        predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
         return tokenizer.decode(predict_answer_tokens)
 
     hf_result = decode_qa(inputs, hf_outputs[0], hf_outputs[1], tokenizer)
@@ -395,9 +393,7 @@ def test_token_classification(input_str, expected_output, token_classification):
 
     assert ane_outputs[0].shape == hf_outputs[0].shape
 
-    peak_signal_to_noise_ratio = compute_psnr(
-        _np_probs(hf_outputs[0]), _np_probs(ane_outputs[0])
-    )
+    peak_signal_to_noise_ratio = compute_psnr(_np_probs(hf_outputs[0]), _np_probs(ane_outputs[0]))
     assert peak_signal_to_noise_ratio > PSNR_THRESHOLD
 
     def get_labelled_tokens(
@@ -412,9 +408,7 @@ def test_token_classification(input_str, expected_output, token_classification):
         tokens = tokenizer.tokenize(input_str)
         return [(token, label) for token, label in zip(tokens, labels[1:-1])]
 
-    hf_result = get_labelled_tokens(
-        hf_outputs[0], input_str, hf_model.config.id2label, tokenizer
-    )
+    hf_result = get_labelled_tokens(hf_outputs[0], input_str, hf_model.config.id2label, tokenizer)
     ane_result = get_labelled_tokens(
         ane_outputs[0], input_str, ane_model.config.id2label, tokenizer
     )
@@ -447,9 +441,7 @@ def test_multiple_choice(input_str, choices, expected_output, multiple_choice):
 
     assert ane_outputs[0].shape == hf_outputs[0].shape
 
-    peak_signal_to_noise_ratio = compute_psnr(
-        _np_probs(hf_outputs[0]), _np_probs(ane_outputs[0])
-    )
+    peak_signal_to_noise_ratio = compute_psnr(_np_probs(hf_outputs[0]), _np_probs(ane_outputs[0]))
     assert peak_signal_to_noise_ratio > PSNR_THRESHOLD
 
     def get_choice(output_logits: torch.Tensor, choices: list[str]) -> str:
@@ -511,12 +503,14 @@ def test_multiple_choice(input_str, choices, expected_output, multiple_choice):
     ],
 )
 def test_export(model_name, hf_model_cls, get_inputs, example, tmp_path_factory):
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    baseline = hf_model_cls.from_pretrained(model_name, return_dict=False).eval()
+    from hft2ane.convert.convert import to_coreml
 
-    out_path = (
-        tmp_path_factory.mktemp("test_bert") / f"{hf_model_cls.__name__}.mlpackage"
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    baseline = materialize_params(
+        hf_model_cls.from_pretrained(model_name, return_dict=False).eval()
     )
+
+    out_path = tmp_path_factory.mktemp("test_bert") / f"{hf_model_cls.__name__}.mlpackage"
     converted = to_coreml(model_name, hf_model_cls, out_path)
 
     *args, expected = example
@@ -532,9 +526,7 @@ def test_export(model_name, hf_model_cls, get_inputs, example, tmp_path_factory)
     # TODO: see `tokenizer.model_input_names` for the names of the inputs
     np_inputs = {k: v.numpy().astype(np.int32) for k, v in inputs.items()}
     with torch.no_grad():
-        baseline_outputs = (
-            baseline(**inputs) if isinstance(inputs, Mapping) else baseline(inputs)
-        )
+        baseline_outputs = baseline(**inputs) if isinstance(inputs, Mapping) else baseline(inputs)
     converted_outputs = list(converted.predict(np_inputs).values())
 
     peak_signal_to_noise_ratio: float = compute_psnr(

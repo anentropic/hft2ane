@@ -11,8 +11,8 @@ Ones that look interesting to me...
 - **ALBERT:** reduced params and model tweaks. ALBERT-xxl (235M) beats BERT-large (335M) and RoBERTa-base.
 - **DeBERTa**: "improves the BERT and RoBERTa models using disentangled attention and enhanced mask decoder. With those two improvements, DeBERTa out perform RoBERTa on a majority of NLU tasks" and "using ELECTRA-Style pre-training ... V3 version significantly improves the model performance on downstream tasks"
   - https://huggingface.co/microsoft/deberta-v3-base
-- **CodeBERT**:  
-  Various models, perhaps evolving in pursuit of performance.  
+- **CodeBERT**:
+  Various models, perhaps evolving in pursuit of performance.
   https://github.com/microsoft/CodeBERT
   - https://huggingface.co/microsoft/graphcodebert-base
     A 'Graphformer' (GNN-nested Transformers) "which also considers data-flow information along with code sequences" ... "trained on the CodeSearchNet dataset, which includes 2.3M functions with document pairs for six programming languages". See also:
@@ -52,7 +52,7 @@ Ones that look interesting to me...
     - https://huggingface.co/togethercomputer/GPT-JT-6B-v1 is an impressively trained variant that beats GPT3 in classification tasks
 - **CodeGen2** https://huggingface.co/Salesforce/codegen2-1B it's a custom code model, possibly T5-like since they use "prefix-LM" encoder-decoder approach
   - https://github.com/salesforce/CodeGen2
-  - https://arxiv.org/pdf/2305.02309.pdf in fact the research was mostly useful in failing their initial goals: 
+  - https://arxiv.org/pdf/2305.02309.pdf in fact the research was mostly useful in failing their initial goals:
     1. the Prefix-LM architecture does not yield any measurable improvements on our set of tasks
     2. training a model with infill sampling is not a free lunch
     3. a simple mixture of causal language modeling and span-corruption limited to within-file spans is sufficient
@@ -76,6 +76,6 @@ Ones that look interesting to me...
   - RETRO is newer than REALM and RAG? The [paper](https://arxiv.org/pdf/2112.04426.pdf) shows results for 172M, 425M, 1.5B and 7.5B variants. Also performs well with retrieval disabled (e.g. out of corpus tasks). "baseline models can be rapidly fine-tuned into Retro models to obtain nearly the same performance as if trained from scratch"
     - https://github.com/lucidrains/RETRO-pytorch
     - http://mitchgordon.me/ml/2022/07/01/retro-is-blazing.html
-- **Decision Transformer**  
+- **Decision Transformer**
   "Decision Transformer model can generate future actions that achieve the desired return. Despite its simplicity, Decision Transformer matches or exceeds the performance of state-of-the-art model-free offline RL baselines on Atari, OpenAI Gym, and Key-to-Door tasks"
   - https://huggingface.co/docs/transformers/model_doc/decision_transformer
