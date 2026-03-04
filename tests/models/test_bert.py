@@ -4,8 +4,6 @@ import numpy as np
 import pytest
 import torch
 from ane_transformers.testing_utils import compute_psnr
-from tests.conftest import materialize_params
-
 from hft2ane.evaluate.evaluate import (
     get_dummy_inputs,
     measure_ane_speedup_from_converted,
@@ -40,6 +38,8 @@ from transformers import (
 from transformers import (
     BertForTokenClassification as HF_BertForTokenClassification,
 )
+
+from tests.conftest import materialize_params
 
 TEST_MAX_SEQ_LEN = 256
 PSNR_THRESHOLD = 33
@@ -200,9 +200,7 @@ def token_classification():
 def multiple_choice():
     tokenizer = AutoTokenizer.from_pretrained(MULTIPLE_CHOICE_MODEL)
     hf_model = materialize_params(
-        HF_BertForMultipleChoice.from_pretrained(
-            MULTIPLE_CHOICE_MODEL, return_dict=False
-        ).eval()
+        HF_BertForMultipleChoice.from_pretrained(MULTIPLE_CHOICE_MODEL, return_dict=False).eval()
     )
     ane_model = BertForMultipleChoice.from_pretrained(
         MULTIPLE_CHOICE_MODEL, return_dict=False

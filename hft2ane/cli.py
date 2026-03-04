@@ -356,6 +356,7 @@ def _verify(
     min_snr: float = 60.0,
     speedup_threshold: float = 1.5,
 ):
+    assert converted.package_path is not None
     pkg_path = os.path.relpath(converted.package_path)
 
     try:

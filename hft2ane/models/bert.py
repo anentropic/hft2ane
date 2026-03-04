@@ -136,9 +136,9 @@ class BertSelfAttention(modeling_bert.BertSelfAttention):
 
         context_layer = torch.cat(context_layer, dim=1)  # (bs, dim, 1, max_seq_length)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        attn_weights = attention_probs if output_attentions else None
 
-        return outputs
+        return context_layer, attn_weights
 
 
 class BertSelfOutput(modeling_bert.BertSelfOutput):
@@ -151,15 +151,20 @@ class BertSelfOutput(modeling_bert.BertSelfOutput):
 
 
 class BertAttention(modeling_bert.BertAttention):
-    def __init__(self, config: PretrainedConfig, is_causal=False, layer_idx=None, is_cross_attention=False):
-        super().__init__(config, is_causal=is_causal, layer_idx=layer_idx, is_cross_attention=is_cross_attention)
+    def __init__(
+        self, config: PretrainedConfig, is_causal=False, layer_idx=None, is_cross_attention=False
+    ):
+        super().__init__(
+            config, is_causal=is_causal, layer_idx=layer_idx, is_cross_attention=is_cross_attention
+        )
         self.self = BertSelfAttention(config, is_causal=is_causal, layer_idx=layer_idx)
         self.output = BertSelfOutput(config)
 
     def forward(self, hidden_states, attention_mask=None, **kwargs):
-        self_outputs = self.self(hidden_states, attention_mask=attention_mask, **kwargs)
-        attention_output = self.output(self_outputs[0], hidden_states)
-        attn_weights = self_outputs[1] if len(self_outputs) > 1 else None
+        attention_output, attn_weights = self.self(
+            hidden_states, attention_mask=attention_mask, **kwargs
+        )
+        attention_output = self.output(attention_output, hidden_states)
         return attention_output, attn_weights
 
     def prune_heads(self, heads):

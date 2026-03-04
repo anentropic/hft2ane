@@ -71,14 +71,10 @@ class ANEMixin:
         )
 
         if hf_cls is None:
-            return super().from_pretrained(
-                pretrained_model_name_or_path, *model_args, **kwargs
-            )
+            return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
         # Load into HF model (nn.Linear layers, no size mismatch)
-        hf_model = hf_cls.from_pretrained(
-            pretrained_model_name_or_path, *model_args, **kwargs
-        )
+        hf_model = hf_cls.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
         # Create our ANE model (nn.Conv2d layers) with same config
         ane_model = cls(hf_model.config)

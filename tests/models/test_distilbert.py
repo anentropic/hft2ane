@@ -2,8 +2,6 @@ import numpy as np
 import pytest
 import torch
 from ane_transformers.testing_utils import compute_psnr
-from tests.conftest import materialize_params
-
 from hft2ane.models.distilbert import (
     DistilBertForMaskedLM,
     DistilBertForMultipleChoice,
@@ -30,6 +28,8 @@ from transformers import (
 from transformers import (
     DistilBertForTokenClassification as HF_DistilBertForTokenClassification,
 )
+
+from tests.conftest import materialize_params
 
 TEST_MAX_SEQ_LEN = 256
 PSNR_THRESHOLD = 60
