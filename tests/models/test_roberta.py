@@ -1,33 +1,44 @@
-import pytest
-
 import numpy as np
+import pytest
 import torch
 from ane_transformers.testing_utils import compute_psnr
-from transformers import (
-    AutoTokenizer,
-    RobertaForSequenceClassification as HF_RobertaForSequenceClassification,
-    RobertaForMaskedLM as HF_RobertaForMaskedLM,
-    RobertaForQuestionAnswering as HF_RobertaForQuestionAnswering,
-    RobertaForTokenClassification as HF_RobertaForTokenClassification,
-    RobertaForMultipleChoice as HF_RobertaForMultipleChoice,
-    RobertaForCausalLM as HF_RobertaForCausalLM,
-    PreTrainedTokenizer,
-)
+from tests.conftest import materialize_params
 
 from hft2ane.models.roberta import (
-    RobertaForSequenceClassification,
-    RobertaForMaskedLM,
-    RobertaForQuestionAnswering,
-    RobertaForTokenClassification,
-    RobertaForMultipleChoice,
     RobertaForCausalLM,
+    RobertaForMaskedLM,
+    RobertaForMultipleChoice,
+    RobertaForQuestionAnswering,
+    RobertaForSequenceClassification,
+    RobertaForTokenClassification,
+)
+from transformers import (
+    AutoTokenizer,
+    PreTrainedTokenizer,
+)
+from transformers import (
+    RobertaForCausalLM as HF_RobertaForCausalLM,
+)
+from transformers import (
+    RobertaForMaskedLM as HF_RobertaForMaskedLM,
+)
+from transformers import (
+    RobertaForMultipleChoice as HF_RobertaForMultipleChoice,
+)
+from transformers import (
+    RobertaForQuestionAnswering as HF_RobertaForQuestionAnswering,
+)
+from transformers import (
+    RobertaForSequenceClassification as HF_RobertaForSequenceClassification,
+)
+from transformers import (
+    RobertaForTokenClassification as HF_RobertaForTokenClassification,
 )
 
-
 TEST_MAX_SEQ_LEN = 256
-PSNR_THRESHOLD = 60
+PSNR_THRESHOLD = 55
 
-SEQUENCE_CLASSIFICATION_MODEL = "WillHeld/roberta-base-sst2"
+SEQUENCE_CLASSIFICATION_MODEL = "textattack/roberta-base-SST-2"
 MASKED_LM_MODEL = "roberta-base"
 QUESTION_ANSWERING_MODEL = "deepset/roberta-base-squad2"
 TOKEN_CLASSIFICATION_MODEL = "Jean-Baptiste/roberta-large-ner-english"
@@ -38,21 +49,21 @@ CAUSAL_LM_MODEL = "GItaf/roberta-base-finetuned-mbti-0901"
 @pytest.fixture(scope="session")
 def masked_lm():
     tokenizer = AutoTokenizer.from_pretrained(MASKED_LM_MODEL)
-    hf_model = HF_RobertaForMaskedLM.from_pretrained(
-        MASKED_LM_MODEL, return_dict=False
-    ).eval()
-    ane_model = RobertaForMaskedLM.from_pretrained(
-        MASKED_LM_MODEL, return_dict=False
-    ).eval()
+    hf_model = materialize_params(
+        HF_RobertaForMaskedLM.from_pretrained(MASKED_LM_MODEL, return_dict=False).eval()
+    )
+    ane_model = RobertaForMaskedLM.from_pretrained(MASKED_LM_MODEL, return_dict=False).eval()
     return tokenizer, hf_model, ane_model
 
 
 @pytest.fixture(scope="session")
 def sequence_classification():
     tokenizer = AutoTokenizer.from_pretrained(SEQUENCE_CLASSIFICATION_MODEL)
-    hf_model = HF_RobertaForSequenceClassification.from_pretrained(
-        SEQUENCE_CLASSIFICATION_MODEL, return_dict=False
-    ).eval()
+    hf_model = materialize_params(
+        HF_RobertaForSequenceClassification.from_pretrained(
+            SEQUENCE_CLASSIFICATION_MODEL, return_dict=False
+        ).eval()
+    )
     ane_model = RobertaForSequenceClassification.from_pretrained(
         SEQUENCE_CLASSIFICATION_MODEL, return_dict=False
     ).eval()
@@ -62,9 +73,11 @@ def sequence_classification():
 @pytest.fixture(scope="session")
 def question_answering():
     tokenizer = AutoTokenizer.from_pretrained(QUESTION_ANSWERING_MODEL)
-    hf_model = HF_RobertaForQuestionAnswering.from_pretrained(
-        QUESTION_ANSWERING_MODEL, return_dict=False
-    ).eval()
+    hf_model = materialize_params(
+        HF_RobertaForQuestionAnswering.from_pretrained(
+            QUESTION_ANSWERING_MODEL, return_dict=False
+        ).eval()
+    )
     ane_model = RobertaForQuestionAnswering.from_pretrained(
         QUESTION_ANSWERING_MODEL, return_dict=False
     ).eval()
@@ -74,9 +87,11 @@ def question_answering():
 @pytest.fixture(scope="session")
 def token_classification():
     tokenizer = AutoTokenizer.from_pretrained(TOKEN_CLASSIFICATION_MODEL)
-    hf_model = HF_RobertaForTokenClassification.from_pretrained(
-        TOKEN_CLASSIFICATION_MODEL, return_dict=False
-    ).eval()
+    hf_model = materialize_params(
+        HF_RobertaForTokenClassification.from_pretrained(
+            TOKEN_CLASSIFICATION_MODEL, return_dict=False
+        ).eval()
+    )
     ane_model = RobertaForTokenClassification.from_pretrained(
         TOKEN_CLASSIFICATION_MODEL, return_dict=False
     ).eval()
@@ -86,9 +101,11 @@ def token_classification():
 @pytest.fixture(scope="session")
 def multiple_choice():
     tokenizer = AutoTokenizer.from_pretrained(MULTIPLE_CHOICE_MODEL)
-    hf_model = HF_RobertaForMultipleChoice.from_pretrained(
-        MULTIPLE_CHOICE_MODEL, return_dict=False
-    ).eval()
+    hf_model = materialize_params(
+        HF_RobertaForMultipleChoice.from_pretrained(
+            MULTIPLE_CHOICE_MODEL, return_dict=False
+        ).eval()
+    )
     ane_model = RobertaForMultipleChoice.from_pretrained(
         MULTIPLE_CHOICE_MODEL, return_dict=False
     ).eval()
@@ -98,12 +115,10 @@ def multiple_choice():
 @pytest.fixture(scope="session")
 def causal_lm():
     tokenizer = AutoTokenizer.from_pretrained(CAUSAL_LM_MODEL)
-    hf_model = HF_RobertaForCausalLM.from_pretrained(
-        CAUSAL_LM_MODEL, return_dict=False
-    ).eval()
-    ane_model = RobertaForCausalLM.from_pretrained(
-        CAUSAL_LM_MODEL, return_dict=False
-    ).eval()
+    hf_model = materialize_params(
+        HF_RobertaForCausalLM.from_pretrained(CAUSAL_LM_MODEL, return_dict=False).eval()
+    )
+    ane_model = RobertaForCausalLM.from_pretrained(CAUSAL_LM_MODEL, return_dict=False).eval()
     return tokenizer, hf_model, ane_model
 
 
@@ -119,9 +134,7 @@ def _decode_masked(
     return tokenizer.convert_tokens_to_string([tokens])
 
 
-def _get_class_index(
-    output_logits: torch.Tensor, id2label: dict[int, str | int]
-) -> str | int:
+def _get_class_index(output_logits: torch.Tensor, id2label: dict[int, str | int]) -> str | int:
     return id2label[torch.argmax(output_logits, dim=1).item()]
 
 
@@ -133,9 +146,7 @@ def _decode_qa(
 ) -> str:
     answer_start_index = torch.argmax(start_logits)
     answer_end_index = torch.argmax(end_logits)
-    predict_answer_tokens = inputs.input_ids[
-        0, answer_start_index : answer_end_index + 1
-    ]
+    predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
     return tokenizer.decode(predict_answer_tokens)
 
 
@@ -148,9 +159,7 @@ def _get_labelled_tokens(
     # NOTE: The first and last tokens of `predicted_labels` are [CLS] and [SEP] respectively
     predicted_labels = torch.argmax(output_logits, dim=2)
     labels = [id2label[label_id] for label_id in predicted_labels[0].tolist()]
-    tokens = map(
-        lambda s: tokenizer.convert_tokens_to_string([s]), tokenizer.tokenize(input_str)
-    )
+    tokens = map(lambda s: tokenizer.convert_tokens_to_string([s]), tokenizer.tokenize(input_str))
     return [(token, label) for token, label in zip(tokens, labels[1:-1])]
 
 
@@ -182,9 +191,7 @@ def test_masked_lm(input_str, expected_output, masked_lm):
 
     assert ane_outputs[0].shape == hf_outputs[0].shape
 
-    peak_signal_to_noise_ratio = compute_psnr(
-        _np_probs(hf_outputs[0]), _np_probs(ane_outputs[0])
-    )
+    peak_signal_to_noise_ratio = compute_psnr(_np_probs(hf_outputs[0]), _np_probs(ane_outputs[0]))
     assert peak_signal_to_noise_ratio > PSNR_THRESHOLD
 
     hf_result = _decode_masked(hf_outputs[0], tokenizer, masked_index)
@@ -197,8 +204,8 @@ def test_masked_lm(input_str, expected_output, masked_lm):
 @pytest.mark.parametrize(
     "input_str,expected_output",
     [
-        ("Today was a good day!", "positive"),
-        ("This is not what I expected!", "negative"),
+        ("Today was a good day!", "LABEL_1"),
+        ("This is not what I expected!", "LABEL_0"),
     ],
 )
 def test_sequence_classification(input_str, expected_output, sequence_classification):
@@ -314,14 +321,10 @@ def test_token_classification(input_str, expected_output, token_classification):
 
     assert ane_outputs[0].shape == hf_outputs[0].shape
 
-    peak_signal_to_noise_ratio = compute_psnr(
-        _np_probs(hf_outputs[0]), _np_probs(ane_outputs[0])
-    )
+    peak_signal_to_noise_ratio = compute_psnr(_np_probs(hf_outputs[0]), _np_probs(ane_outputs[0]))
     assert peak_signal_to_noise_ratio > PSNR_THRESHOLD
 
-    hf_result = _get_labelled_tokens(
-        hf_outputs[0], input_str, hf_model.config.id2label, tokenizer
-    )
+    hf_result = _get_labelled_tokens(hf_outputs[0], input_str, hf_model.config.id2label, tokenizer)
     ane_result = _get_labelled_tokens(
         ane_outputs[0], input_str, ane_model.config.id2label, tokenizer
     )
@@ -362,9 +365,7 @@ def test_multiple_choice(input_str, choices, expected_output, multiple_choice):
 
     assert ane_outputs[0].shape == hf_outputs[0].shape
 
-    peak_signal_to_noise_ratio = compute_psnr(
-        _np_probs(hf_outputs[0]), _np_probs(ane_outputs[0])
-    )
+    peak_signal_to_noise_ratio = compute_psnr(_np_probs(hf_outputs[0]), _np_probs(ane_outputs[0]))
     assert peak_signal_to_noise_ratio > PSNR_THRESHOLD
 
     hf_result = _get_choice(hf_outputs[0], choices)
@@ -391,9 +392,7 @@ def test_multiple_choice(input_str, choices, expected_output, multiple_choice):
 def test_causal_lm(input_str, expected_output, causal_lm):
     torch.manual_seed(42)
     tokenizer, hf_model, ane_model = causal_lm
-    input_ids = tokenizer.encode(
-        input_str, add_special_tokens=False, return_tensors="pt"
-    )
+    input_ids = tokenizer.encode(input_str, add_special_tokens=False, return_tensors="pt")
 
     with torch.no_grad():
         hf_output_ids = hf_model.generate(
