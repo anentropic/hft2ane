@@ -27,3 +27,10 @@ At a glance looks potentially good for this.
 - https://pytorch.org/blog/triton-kernel-compilation-stages/
 - https://triton-lang.org/main/dialects/dialects.html
   - ...we could make some kind of ANE dialect?
+
+### Already happening...?
+
+- https://github.com/christopherkarani/Espresso
+  appears to be implementing the reverse-engineered stuff from maderix "using the private MIL text dialect"
+  - https://github.com/smpanaro/more-ane-transformers/discussions/4
+    "We've been focusing on the fused-kernel path for decode with KV-cache"
