@@ -10,9 +10,9 @@ So currently we are limited in types of model we can convert and compile to ANE,
 
 ## Custom compiler?
 
-https://maderix.substack.com/p/inside-the-m4-apple-neural-engine?r=1afltp
-https://maderix.substack.com/p/inside-the-m4-apple-neural-engine-615?r=1afltp
-https://github.com/maderix/ANE
+- https://maderix.substack.com/p/inside-the-m4-apple-neural-engine?r=1afltp
+- https://maderix.substack.com/p/inside-the-m4-apple-neural-engine-615?r=1afltp
+- https://github.com/maderix/ANE
 
 In light of the reverse-engineering work above...
 
